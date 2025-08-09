@@ -4,3 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1"
+thiserror = "1"
+# GTK4 and Libadwaita for GNOME apps
+gtk4 = "0.8"
+# GLib/GIO
+gio = "0.18"
+glib = "0.18"
+# Utilities for locating XDG directories
+directories = "5"
+open = "5"
