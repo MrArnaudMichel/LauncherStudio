@@ -9,7 +9,7 @@ fn main() {
 }
 
 fn create_file(){
-    let path: &Path = Path::new("test.desk");
+    let path: &Path = Path::new("test/test.desk");
     let display = path.display();
     println!("{}", display);
 
