@@ -12,6 +12,8 @@ pub fn show_main_window(app: &Application) {
         .default_height(600)
         .build();
 
+    win.set_icon_name(Some("assets/icon.png"));
+
     let header = HeaderBar::new();
     win.set_titlebar(Some(&header));
 
