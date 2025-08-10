@@ -210,7 +210,9 @@ pub fn build_editor() -> Editor {
     // Optional fields
     let (tryexec_row, tryexec_entry) = crate::ui::components::labeled_entry("TryExec");
     let (path_row, path_entry) = crate::ui::components::labeled_entry("Working Dir (Path)");
-    let (url_row, url_entry) = crate::ui::components::labeled_entry("URL (Type=Link)");
+    // Create URL entry directly to avoid parenting it in an unused row
+    let url_entry = Entry::new();
+    url_entry.set_hexpand(true);
 
     // Make Path field clickable via secondary icon to open directory/file
     path_entry.set_icon_from_icon_name(EntryIconPosition::Secondary, Some("folder-open-symbolic"));
@@ -253,7 +255,7 @@ pub fn build_editor() -> Editor {
     // Complete dynamic Exec/URL row wiring
     exec_link_box.append(&url_entry);
     // Add a Select... button for Link/Folder to pick file or directory
-    let url_btn = Button::with_label("Select...");
+    let url_btn = Button::with_label("Parcourir...");
     {
         let url_entry_c = url_entry.clone();
         let type_combo_c = type_combo.clone();
@@ -262,7 +264,7 @@ pub fn build_editor() -> Editor {
             let is_dir = ty == "Directory";
             let action = if is_dir { FileChooserAction::SelectFolder } else { FileChooserAction::Open };
             let dialog = FileChooserDialog::new(
-                Some(if is_dir { "Select Folder" } else { "Select File or Folder" }),
+                Some(if is_dir { "Sélectionner un dossier" } else { "Sélectionner un fichier ou un dossier" }),
                 None::<&gtk4::ApplicationWindow>,
                 action,
                 &[("Cancel", gtk4::ResponseType::Cancel), ("Open", gtk4::ResponseType::Accept)]
@@ -484,8 +486,9 @@ pub fn apply_type_rules(w: &EntryWidgets) {
         w.exec_lbl.set_text("Exec*");
         w.exec_app_box.set_visible(true);
         w.exec_link_box.set_visible(false);
-        // For Application, URL button is irrelevant
+        // For Application, URL controls are irrelevant
         w.url_btn.set_visible(false);
+        w.url_entry.set_visible(false);
     } else if is_link {
         w.exec_lbl.set_visible(true);
         w.exec_lbl.set_text("URL*");
@@ -493,6 +496,7 @@ pub fn apply_type_rules(w: &EntryWidgets) {
         w.exec_link_box.set_visible(true);
         // Link: only a text entry (no chooser button)
         w.url_btn.set_visible(false);
+        w.url_entry.set_visible(true);
     } else {
         // Directory (Folder): show text entry + chooser button
         w.exec_lbl.set_visible(true);
@@ -500,6 +504,7 @@ pub fn apply_type_rules(w: &EntryWidgets) {
         w.exec_app_box.set_visible(false);
         w.exec_link_box.set_visible(true);
         w.url_btn.set_visible(true);
+        w.url_entry.set_visible(true);
     }
 
     // Base off: then enable per type
