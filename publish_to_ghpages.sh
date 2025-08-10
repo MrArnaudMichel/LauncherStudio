@@ -13,7 +13,6 @@ TMP_DIR=$(mktemp -d)
 cp -r debian/* "$TMP_DIR/"
 
 cd "$TMP_DIR"
-git init
 
 git checkout -b gh-pages
 
