@@ -7,16 +7,16 @@ license = "MIT"
 authors = ["Arnaud Michel contact@arnaudmichel.fr"]
 
 [dependencies]
-anyhow = "1"
-thiserror = "1"
+anyhow = "1.0.98"
+
 # GTK4 and Libadwaita for GNOME apps
-gtk4 = "0.8"
+gtk4 = "0.10.0"
 # GLib/GIO
-gio = "0.18"
-glib = "0.18"
+gio = "0.21.1"
+glib = "0.21.1"
 # Utilities for locating XDG directories
-directories = "5"
-open = "5"
+directories = "6.0.0"
+open = "5.3.2"
 
 [package.metadata.deb]
 copyright = "© 2025 Arnaud Michel"

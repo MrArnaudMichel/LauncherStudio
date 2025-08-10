@@ -6,6 +6,7 @@ use gtk4::gdk;
 
 use crate::domain::desktop_entry::DesktopEntry;
 
+#[derive(Clone)]
 pub struct EntryWidgets {
     pub type_combo: ComboBoxText,
     pub name_entry: Entry,
@@ -425,4 +426,168 @@ fn parse_kv_lines(s: &str) -> Vec<(String, String)> {
             if k.is_empty() { None } else { Some((k, v)) }
         } else { None }
     }).collect()
+}
+
+
+// --- Added: parse from source and wire two-way sync for Source tab ---
+pub fn parse_desktop_source(content: &str) -> DesktopEntry {
+    let mut entry = DesktopEntry::default();
+    let mut in_desktop = false;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') { continue; }
+        if line.starts_with('[') && line.ends_with(']') {
+            in_desktop = line == "[Desktop Entry]";
+            continue;
+        }
+        if !in_desktop { continue; }
+        if let Some((k, v)) = line.split_once('=') {
+            let key = k.trim();
+            let val = v.trim().to_string();
+            match key {
+                "Type" => entry.type_field = val,
+                "Name" => entry.name = val,
+                _ if key.starts_with("Name[") && key.ends_with("]") => {
+                    let lang = key.trim_start_matches("Name[").trim_end_matches("]").to_string();
+                    entry.name_localized.push((lang, val));
+                }
+                "GenericName" => entry.generic_name = Some(val),
+                _ if key.starts_with("GenericName[") && key.ends_with("]") => {
+                    let lang = key.trim_start_matches("GenericName[").trim_end_matches("]").to_string();
+                    entry.generic_name_localized.push((lang, val));
+                }
+                "Comment" => entry.comment = Some(val),
+                _ if key.starts_with("Comment[") && key.ends_with("]") => {
+                    let lang = key.trim_start_matches("Comment[").trim_end_matches("]").to_string();
+                    entry.comment_localized.push((lang, val));
+                }
+                "Exec" => entry.exec = val,
+                "TryExec" => entry.try_exec = Some(val),
+                "Icon" => entry.icon = Some(val),
+                "Path" => entry.path = Some(val),
+                "URL" => entry.url = Some(val),
+                "Terminal" => entry.terminal = val.eq_ignore_ascii_case("true"),
+                "NoDisplay" => entry.no_display = val.eq_ignore_ascii_case("true"),
+                "StartupNotify" => entry.startup_notify = val.eq_ignore_ascii_case("true"),
+                "Categories" => entry.categories = val.split(';').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect(),
+                "MimeType" => entry.mime_type = val.split(';').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect(),
+                "Keywords" => entry.keywords = val.split(';').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect(),
+                "OnlyShowIn" => entry.only_show_in = val.split(';').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect(),
+                "NotShowIn" => entry.not_show_in = val.split(';').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect(),
+                "Actions" => entry.actions = val.split(';').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect(),
+                _ => entry.extra.push((key.to_string(), val)),
+            }
+        }
+    }
+    if entry.type_field.is_empty() { entry.type_field = "Application".into(); }
+    entry
+}
+
+pub fn wire_source_sync(editor: &Editor) {
+    use std::rc::Rc;
+    use std::cell::RefCell;
+
+    let widgets = &editor.widgets;
+    let source_view = editor.source_view.clone();
+
+    // Guard to avoid infinite loops when programmatically updating
+    let guard = Rc::new(RefCell::new(false));
+
+    let update_from_fields = {
+        let w = clone_widgets(widgets);
+        let source_view = source_view.clone();
+        let guard = guard.clone();
+        move || {
+            if *guard.borrow() { return; }
+            if let Ok(de) = collect_entry(&w) {
+                *guard.borrow_mut() = true;
+                let buf = source_view.buffer();
+                buf.set_text(&de.to_ini_string());
+                *guard.borrow_mut() = false;
+            }
+        }
+    };
+
+    // Connect field changes
+    let connect_entry = |e: &Entry| {
+        let cb = update_from_fields.clone();
+        e.connect_changed(move |_| cb());
+    };
+    let connect_check = |c: &CheckButton| {
+        let cb = update_from_fields.clone();
+        c.connect_toggled(move |_| cb());
+    };
+
+    widgets.type_combo.connect_changed({ let cb = update_from_fields.clone(); move |_| cb() });
+    connect_entry(&widgets.name_entry);
+    connect_entry(&widgets.generic_name_entry);
+    connect_entry(&widgets.comment_entry);
+    connect_entry(&widgets.exec_entry);
+    connect_entry(&widgets.icon_entry);
+    connect_check(&widgets.terminal_check);
+    connect_check(&widgets.nodisplay_check);
+    connect_check(&widgets.startup_check);
+    connect_entry(&widgets.categories_entry);
+    connect_entry(&widgets.mimetype_entry);
+    connect_entry(&widgets.keywords_entry);
+    connect_entry(&widgets.onlyshowin_entry);
+    connect_entry(&widgets.notshowin_entry);
+    connect_entry(&widgets.tryexec_entry);
+    connect_entry(&widgets.path_entry);
+    connect_entry(&widgets.url_entry);
+    connect_entry(&widgets.actions_entry);
+
+    let connect_textview = |tv: &TextView| {
+        let cb = update_from_fields.clone();
+        tv.buffer().connect_changed(move |_| cb());
+    };
+    connect_textview(&widgets.localized_name);
+    connect_textview(&widgets.localized_gname);
+    connect_textview(&widgets.localized_comment);
+    connect_textview(&widgets.extra_kv);
+
+    // Connect source buffer changes to parse back into fields
+    {
+        let w = clone_widgets(widgets);
+        let source_buf = source_view.buffer();
+        let guard = guard.clone();
+        source_buf.connect_changed(move |buf| {
+            if *guard.borrow() { return; }
+            let text = buf.text(&buf.start_iter(), &buf.end_iter(), true).to_string();
+            let de = parse_desktop_source(&text);
+            *guard.borrow_mut() = true;
+            set_form_from_entry(&w, &de);
+            *guard.borrow_mut() = false;
+        });
+    }
+
+    // Initialize source with current fields
+    update_from_fields();
+}
+
+fn clone_widgets(w: &EntryWidgets) -> EntryWidgets {
+    EntryWidgets {
+        type_combo: w.type_combo.clone(),
+        name_entry: w.name_entry.clone(),
+        generic_name_entry: w.generic_name_entry.clone(),
+        comment_entry: w.comment_entry.clone(),
+        exec_entry: w.exec_entry.clone(),
+        icon_entry: w.icon_entry.clone(),
+        terminal_check: w.terminal_check.clone(),
+        nodisplay_check: w.nodisplay_check.clone(),
+        startup_check: w.startup_check.clone(),
+        categories_entry: w.categories_entry.clone(),
+        mimetype_entry: w.mimetype_entry.clone(),
+        keywords_entry: w.keywords_entry.clone(),
+        onlyshowin_entry: w.onlyshowin_entry.clone(),
+        notshowin_entry: w.notshowin_entry.clone(),
+        tryexec_entry: w.tryexec_entry.clone(),
+        path_entry: w.path_entry.clone(),
+        url_entry: w.url_entry.clone(),
+        actions_entry: w.actions_entry.clone(),
+        localized_name: w.localized_name.clone(),
+        localized_gname: w.localized_gname.clone(),
+        localized_comment: w.localized_comment.clone(),
+        extra_kv: w.extra_kv.clone(),
+    }
 }

@@ -1,5 +1,5 @@
 use gtk4::prelude::*;
-use gtk4::{self, Align, Application, ApplicationWindow, Box as GtkBox, Button, FileChooserDialog, FileChooserAction, HeaderBar, Orientation, ResponseType, ScrolledWindow, Label, Image, ListBoxRow};
+use gtk4::{self, Align, Application, ApplicationWindow, Box as GtkBox, Button, FileChooserDialog, FileChooserAction, HeaderBar, Orientation, ResponseType, ScrolledWindow, Label, Image, ListBoxRow, ToggleButton, Settings};
 use gtk4::gio::SimpleAction;
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -18,12 +18,48 @@ pub fn show_main_window(app: &Application) {
         .resizable(true)
         .build();
 
-    // App icon (asset renamed in repo to custom-app-icon.png)
-    win.set_icon_name(Some("assets/custom-app-icon.png"));
-
     // Header bar stays minimal (title), we build our own menu + toolbar below
     let header = HeaderBar::new();
+
+    // Theme toggle (dark/light) button placed at the right side of the header bar,
+    // which is visually left of the window close button in GNOME CSD.
+    let theme_btn = ToggleButton::builder()
+        .icon_name("weather-night-symbolic")
+        .build();
+    theme_btn.set_tooltip_text(Some("Toggle dark theme"));
+    header.pack_end(&theme_btn);
+
+    // Initialize from current GTK setting and wire toggling + sync with system changes
+    if let Some(settings) = Settings::default() {
+        let is_dark: bool = settings.property::<bool>("gtk-application-prefer-dark-theme");
+        theme_btn.set_active(is_dark);
+        let initial_icon = if is_dark { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
+        theme_btn.set_icon_name(initial_icon);
+
+        // When user toggles, update preference and button icon
+        let theme_btn_c = theme_btn.clone();
+        theme_btn.connect_toggled(move |btn| {
+            let active = btn.is_active();
+            if let Some(settings) = Settings::default() {
+                let _ = settings.set_property("gtk-application-prefer-dark-theme", &active);
+            }
+            let name = if active { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
+            btn.set_icon_name(name);
+        });
+
+        // Listen to system preference changes and keep toggle/icon in sync
+        let theme_btn_settings = theme_btn_c.clone();
+        settings.connect_notify_local(Some("gtk-application-prefer-dark-theme"), move |s, _| {
+            let is_dark_now: bool = s.property::<bool>("gtk-application-prefer-dark-theme");
+            theme_btn_settings.set_active(is_dark_now);
+            let icon = if is_dark_now { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
+            theme_btn_settings.set_icon_name(icon);
+        });
+    }
+
     win.set_titlebar(Some(&header));
+
+    win.set_decorated(true);
 
     let root = GtkBox::new(Orientation::Vertical, 6);
     root.set_margin_top(12);
@@ -51,6 +87,8 @@ pub fn show_main_window(app: &Application) {
     let editor = crate::ui::editor::entry_form::build_editor();
     let scroller = ScrolledWindow::builder().hexpand(true).vexpand(true).build();
     scroller.set_child(Some(&editor.notebook));
+    // Two-way sync between fields and Source tab
+    crate::ui::editor::entry_form::wire_source_sync(&editor);
 
     // Expose editor widgets locally to reuse existing wiring below
     let type_combo = editor.widgets.type_combo.clone();
@@ -80,8 +118,11 @@ pub fn show_main_window(app: &Application) {
     // Buttons for Preview/Save
     let buttons = GtkBox::new(Orientation::Horizontal, 8);
     buttons.set_halign(Align::End);
+    let delete_btn = Button::with_label("Delete");
+    delete_btn.add_css_class("destructive-action");
     let preview_btn = Button::with_label("Preview");
     let save_btn = Button::with_label("Save .desktop");
+    buttons.append(&delete_btn);
     buttons.append(&preview_btn);
     buttons.append(&save_btn);
 
@@ -291,7 +332,7 @@ pub fn show_main_window(app: &Application) {
             match crate::ui::helpers::collect_entry(&type_combo, &name_entry, &generic_name_entry, &comment_entry, &exec_entry, &icon_entry, &terminal_check, &nodisplay_check, &startup_check, &categories_entry, &mimetype_entry, &keywords_entry, &onlyshowin_entry, &notshowin_entry, &tryexec_entry, &path_entry, &url_entry, &actions_entry, &localized_name, &localized_gname, &localized_comment, &extra_kv) {
                 Ok(de) => {
                     let fname = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
-                    match DesktopWriter::write(&de, &fname, false) {
+                    match DesktopWriter::write(&de, &fname, true) {
                         Ok(path) => { status_label.set_text(&format!("Saved: {}", path.display())); }
                         Err(e) => status_label.set_text(&format!("Save failed: {}", e)),
                     }
@@ -372,7 +413,7 @@ pub fn show_main_window(app: &Application) {
             match crate::ui::helpers::collect_entry(&type_combo, &name_entry, &generic_name_entry, &comment_entry, &exec_entry, &icon_entry, &terminal_check, &nodisplay_check, &startup_check, &categories_entry, &mimetype_entry, &keywords_entry, &onlyshowin_entry, &notshowin_entry, &tryexec_entry, &path_entry, &url_entry, &actions_entry, &localized_name, &localized_gname, &localized_comment, &extra_kv) {
                 Ok(de) => {
                     let fname = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
-                    match DesktopWriter::write(&de, &fname, false) {
+                    match DesktopWriter::write(&de, &fname, true) {
                         Ok(path) => { status_label.set_text(&format!("Saved: {}", path.display())); }
                         Err(e) => status_label.set_text(&format!("Save failed: {}", e)),
                     }
@@ -407,6 +448,57 @@ pub fn show_main_window(app: &Application) {
 
     // Initial population
     refresh_list();
+
+    // Delete handler
+    {
+        use std::fs;
+        let win_del = win.clone();
+        let state_del = state.clone();
+        let set_form = set_form_from_entry.clone();
+        let status_label_del = status_label.clone();
+        let refresh = refresh_list.clone();
+        delete_btn.connect_clicked(move |_| {
+            let maybe_path = state_del.borrow().selected_path.clone();
+            if let Some(path) = maybe_path {
+                let dialog = gtk4::MessageDialog::builder()
+                    .transient_for(&win_del)
+                    .modal(true)
+                    .title("Confirm deletion")
+                    .text("Delete selected .desktop file?")
+                    .secondary_text(&format!("This will permanently remove:\n{}", path.display()))
+                    .build();
+                dialog.add_button("Cancel", ResponseType::Cancel);
+                dialog.add_button("Delete", ResponseType::Accept);
+                let win_del_c = win_del.clone();
+                let set_form_c = set_form.clone();
+                let state_del_c = state_del.clone();
+                let refresh_c = refresh.clone();
+                let status_label_del_c = status_label_del.clone();
+                dialog.connect_response(move |d, resp| {
+                    if resp == ResponseType::Accept {
+                        if let Err(e) = fs::remove_file(&path) {
+                            let err = format!("Failed to delete: {}", e);
+                            show_error(&win_del_c, &err);
+                        } else {
+                            // Clear form
+                            set_form_c(&DesktopEntry { name: String::new(), type_field: "Application".into(), ..Default::default() });
+                            // Reset selection
+                            state_del_c.borrow_mut().selected_path = None;
+                            // Refresh list
+                            refresh_c();
+                            // Update status
+                            status_label_del_c.set_text("Deleted");
+                        }
+                    }
+                    d.close();
+                });
+                dialog.show();
+            } else {
+                // No selected file
+                show_error(&win_del, "No file selected to delete");
+            }
+        });
+    }
 
     // Preview handler
     let type_combo_preview = type_combo.clone();
@@ -491,7 +583,7 @@ pub fn show_main_window(app: &Application) {
         match entry {
             Ok(de) => {
                 let file_name = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
-                match DesktopWriter::write(&de, &file_name, false) {
+                match DesktopWriter::write(&de, &file_name, true) {
                     Ok(path) => {
                         let dialog = gtk4::MessageDialog::builder()
                             .transient_for(&win_save)
