@@ -8,7 +8,7 @@ pub fn run() {
 
     // Crée une nouvelle application Libadwaita (sous-classe de GTK4 Application)
     let app = Application::builder()
-        .application_id("com.example.desktopentrymanager")
+        .application_id("fr.arnaudmichel.launcherstudio")
         .build();
 
     // Connecte le signal 'activate' à la fonction qui ouvre la fenêtre principale

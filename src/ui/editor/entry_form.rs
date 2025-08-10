@@ -291,6 +291,7 @@ pub fn build_editor() -> Editor {
     Editor { notebook, source_view, widgets }
 }
 
+#[allow(dead_code)]
 pub fn update_source(w: &EntryWidgets, source_view: &TextView) {
     if let Ok(de) = collect_entry(w) {
         let content = de.to_ini_string();

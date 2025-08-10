@@ -1,6 +1,5 @@
 use gtk4::{PopoverMenuBar};
 use gtk4::gio::Menu;
-use gtk4::prelude::*;
 use gtk4::Application;
 
 // Builds the application menu bar with File/View/Tools/Help/Credits.

@@ -1,7 +1,6 @@
-use gtk4::prelude::*;
 use gtk4::{self, Align, Application, ApplicationWindow, Box as GtkBox, Button, FileChooserDialog, FileChooserAction, Orientation, ResponseType, ScrolledWindow, Label, Image, ListBoxRow, ToggleButton};
 use gtk4::gio::SimpleAction;
-use adw::{ApplicationWindow as AdwApplicationWindow, HeaderBar as AdwHeaderBar, StyleManager, ColorScheme, ToolbarView, AboutWindow};
+use adw::{ApplicationWindow as AdwApplicationWindow, HeaderBar as AdwHeaderBar, StyleManager, ColorScheme, ToolbarView, AboutDialog};
 use adw::prelude::*;
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -17,7 +16,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
 
     let win = AdwApplicationWindow::builder()
         .application(&app)
-        .title("Desktop Entry Manager")
+        .title("# Launcher Studio")
         .default_width(1000)
         .default_height(700)
         .resizable(true)
@@ -111,7 +110,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
     let localized_gname = editor.widgets.localized_gname.clone();
     let localized_comment = editor.widgets.localized_comment.clone();
     let extra_kv = editor.widgets.extra_kv.clone();
-    let source_view = editor.source_view.clone();
+    // let source_view = editor.source_view.clone();
 
     // Buttons for Preview/Save
     let buttons = GtkBox::new(Orientation::Horizontal, 8);
@@ -143,7 +142,11 @@ pub fn show_main_window(app: &impl IsA<Application>) {
 
     // Simple app state
     #[derive(Default, Clone)]
-    struct UiState { selected_path: Option<PathBuf> }
+    struct UiState {
+        selected_path: Option<PathBuf>,
+        in_edit: bool,
+        temp_row: Option<ListBoxRow>,
+    }
     let state = Rc::new(RefCell::new(UiState::default()));
 
     // Helpers
@@ -205,10 +208,61 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         }
     };
 
+    // Create or update the temporary in-edit row (disabled/grey)
+    use std::rc::Rc as StdRc;
+    // Create or update the temporary in-edit row (disabled/grey)
+    let ensure_temp_row: StdRc<dyn Fn()> = {
+        let listbox = listbox.clone();
+        let state = state.clone();
+        let name_entry = name_entry.clone();
+        let icon_entry = icon_entry.clone();
+        StdRc::new(move || {
+            // Remove previous temp row if any
+            if let Some(row) = state.borrow_mut().temp_row.take() {
+                listbox.remove(&row);
+            }
+            // Build label and icon from fields
+            let name = {
+                let n = name_entry.text().to_string();
+                if n.trim().is_empty() { "(New entry)".to_string() } else { n }
+            };
+            let icon_txt = icon_entry.text().to_string();
+            let img = if icon_txt.trim().is_empty() {
+                Image::from_icon_name("application-x-executable-symbolic")
+            } else if icon_txt.contains('/') { Image::from_file(icon_txt) } else { Image::from_icon_name(&icon_txt) };
+            img.set_pixel_size(16);
+
+            let row = ListBoxRow::new();
+            let hb = GtkBox::new(Orientation::Horizontal, 6);
+            hb.append(&img);
+            let lbl = Label::new(Some(&name));
+            lbl.set_xalign(0.0);
+            hb.append(&lbl);
+            row.set_child(Some(&hb));
+            row.set_selectable(false);
+            row.set_sensitive(false); // greyed out look while editing
+            row.add_css_class("activatable");
+            row.set_widget_name(":unsaved");
+            listbox.append(&row);
+            state.borrow_mut().temp_row = Some(row);
+        })
+    };
+
+    // Remove temp row if present
+    let remove_temp_row: StdRc<dyn Fn()> = {
+        let listbox = listbox.clone();
+        let state = state.clone();
+        StdRc::new(move || {
+            if let Some(row) = state.borrow_mut().temp_row.take() {
+                listbox.remove(&row);
+            }
+        })
+    };
     let refresh_list = {
         let listbox = listbox.clone();
         let status_label = status_label.clone();
-        let state = state.clone();
+        let state_c = state.clone();
+        let ensure_temp_row_c = ensure_temp_row.clone();
         move || {
             // Clear existing
             while let Some(child) = listbox.first_child() { listbox.remove(&child); }
@@ -246,6 +300,10 @@ pub fn show_main_window(app: &impl IsA<Application>) {
                         listbox.append(&row);
                     }
                     status_label.set_text("List refreshed");
+                    // If we are creating a new entry, keep showing the temporary grey row
+                    if state_c.borrow().in_edit {
+                        (ensure_temp_row_c)();
+                    }
                 }
                 Err(e) => status_label.set_text(&format!("Failed to list: {}", e)),
             }
@@ -254,11 +312,16 @@ pub fn show_main_window(app: &impl IsA<Application>) {
 
     // List selection
     {
-        let listbox_c = listbox.clone();
+        // let listbox_c = listbox.clone();
         let state_c = state.clone();
         let set_form = set_form_from_entry.clone();
         let status_label = status_label.clone();
+        let remove_temp_row_c = remove_temp_row.clone();
         listbox.connect_row_activated(move |_, row| {
+            // If we were editing a new entry, stop and remove temp row
+            state_c.borrow_mut().in_edit = false;
+            // Remove temp row if present
+            (remove_temp_row_c)();
             let path_str = row.widget_name();
             let path = PathBuf::from(path_str);
             match DesktopReader::read_from_path(&path) {
@@ -279,22 +342,33 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let state_c = state.clone();
         let status_label = status_label.clone();
         let set_form = set_form_from_entry.clone();
+        let ensure_temp_row_c = ensure_temp_row.clone();
         btn_new.connect_clicked(move |_| {
             // Clear form by setting empty entry
             set_form(&DesktopEntry { name: String::new(), type_field: "Application".into(), ..Default::default() });
-            state_c.borrow_mut().selected_path = None;
+            let mut st = state_c.borrow_mut();
+            st.selected_path = None;
+            st.in_edit = true;
+            drop(st);
+            (ensure_temp_row_c)();
             status_label.set_text("New entry");
         });
     }
     {
         let status_label = status_label.clone();
         let set_form = set_form_from_entry.clone();
+        let remove_temp_row_c = remove_temp_row.clone();
+        let state_c2 = state.clone();
         btn_open.connect_clicked(move |_| {
             let dialog = FileChooserDialog::new(Some("Open .desktop"), None::<&ApplicationWindow>, FileChooserAction::Open, &[("Cancel", ResponseType::Cancel), ("Open", ResponseType::Accept)]);
             let status_label2 = status_label.clone();
             let set_form2 = set_form.clone();
+            let remove_temp_row_c2 = remove_temp_row_c.clone();
+            let state_c3 = state_c2.clone();
             dialog.connect_response(move |d, resp| {
                 if resp == ResponseType::Accept {
+                    (remove_temp_row_c2)();
+                    state_c3.borrow_mut().in_edit = false;
                     if let Some(file) = d.file() { if let Some(path) = file.path() {
                         match DesktopReader::read_from_path(&path) {
                             Ok(de) => { set_form2(&de); status_label2.set_text(&path.to_string_lossy()); }
@@ -356,8 +430,15 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let status_label_new = status_label.clone();
         let app_add_new = app.clone();
         let new_action = SimpleAction::new("new", None);
+        let ensure_temp_row_c = ensure_temp_row.clone();
+        let state_new = state.clone();
         new_action.connect_activate(move |_, _| {
             set_form(&DesktopEntry { name: String::new(), type_field: "Application".into(), ..Default::default() });
+            let mut st = state_new.borrow_mut();
+            st.selected_path = None;
+            st.in_edit = true;
+            drop(st);
+            (ensure_temp_row_c)();
             status_label_new.set_text("New entry");
         });
         app_add_new.add_action(&new_action);
@@ -367,6 +448,8 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let status_label_open = status_label.clone();
         let app_add_open = app.clone();
         let open_action = SimpleAction::new("open", None);
+        let remove_temp_row_c = remove_temp_row.clone();
+        let state_open = state.clone();
         open_action.connect_activate(move |_, _| {
             let dialog = FileChooserDialog::new(Some("Open .desktop"), None::<&ApplicationWindow>, FileChooserAction::Open, &[("Cancel", ResponseType::Cancel), ("Open", ResponseType::Accept)]);
             let status_label2 = status_label_open.clone();
@@ -479,16 +562,13 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let about = SimpleAction::new("about", None);
         let win_for_about = win.clone();
         about.connect_activate(move |_, _| {
-            let about_win = AboutWindow::builder()
-                .transient_for(&win_for_about)
-                .modal(true)
-                .application_name("Desktop Entry Manager")
-                .developer_name("Arnaud Michel")
-                .version(env!("CARGO_PKG_VERSION"))
-                .website("https://github.com/")
-                .issue_url("https://github.com/")
-                .build();
-            about_win.present();
+            let about_win = AboutDialog::new();
+            about_win.set_application_name("Desktop Entry Manager");
+            about_win.set_developer_name("Arnaud Michel");
+            about_win.set_version(env!("CARGO_PKG_VERSION"));
+            about_win.set_website("https://github.com/");
+            about_win.set_issue_url("https://github.com/MrArnaudMichel/launcherstudio/issues");
+            about_win.present(Some(&win_for_about));
         });
         app_for_add.add_action(&about);
 
