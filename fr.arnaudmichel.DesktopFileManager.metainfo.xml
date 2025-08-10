@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>fr.arnaudmichel.DesktopFileManager</id>
+    <name>Desktop Entry Creator</name>
+    <summary>Crée et édite des fichiers .desktop pour Linux</summary>
+    <description>
+        <p>Application graphique pour générer des lanceurs .desktop facilement.</p>
+    </description>
+    <launchable type="desktop-id">fr.arnaudmichel.DesktopEntryCreator.desktop</launchable>
+    <url type="homepage">https://arnaudmichel.github.io/desktop_app/</url>
+    <developer_name>Arnaud Michel</developer_name>
+    <icon type="stock">application-x-executable</icon>
+    <provides>
+        <binary>DesktopFileManager</binary>
+    </provides>
+</component>
