@@ -1,7 +1,8 @@
 use gtk4::prelude::*;
-use gtk4::{self, Align, Application, ApplicationWindow, Box as GtkBox, Button, CheckButton, ComboBoxText, Entry, FileChooserAction, FileChooserDialog, HeaderBar, Orientation, ResponseType, ScrolledWindow, TextView, Notebook, ListBox, ListBoxRow, Label, PopoverMenuBar, Image};
+use gtk4::{self, Align, Application, ApplicationWindow, Box as GtkBox, Button, CheckButton, ComboBoxText, Entry, EntryIconPosition, FileChooserAction, FileChooserDialog, HeaderBar, Orientation, ResponseType, ScrolledWindow, TextView, Notebook, ListBox, ListBoxRow, Label, PopoverMenuBar, Image};
 use gtk4::prelude::FileExt;
-use gtk4::gio::{Menu, SimpleAction};
+use gtk4::gio::{Menu, SimpleAction, File};
+use gtk4::gdk;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -103,9 +104,21 @@ pub fn show_main_window(app: &Application) {
     let notebook = Notebook::new();
 
     let basic_box = GtkBox::new(Orientation::Vertical, 8);
+    basic_box.set_margin_top(12);
+    basic_box.set_margin_bottom(12);
+    basic_box.set_margin_start(12);
+    basic_box.set_margin_end(12);
     let advanced_box = GtkBox::new(Orientation::Vertical, 8);
+    advanced_box.set_margin_top(12);
+    advanced_box.set_margin_bottom(12);
+    advanced_box.set_margin_start(12);
+    advanced_box.set_margin_end(12);
     let source_view = TextView::new();
     source_view.set_monospace(true);
+    source_view.set_margin_top(12);
+    source_view.set_margin_bottom(12);
+    source_view.set_margin_start(12);
+    source_view.set_margin_end(12);
 
     // Bottom status bar
     let status_bar = GtkBox::new(Orientation::Horizontal, 6);
@@ -121,8 +134,50 @@ pub fn show_main_window(app: &Application) {
     let (name_row, name_entry) = crate::ui::components::labeled_entry("Name*");
     let (generic_name_row, generic_name_entry) = crate::ui::components::labeled_entry("Generic Name");
     let (comment_row, comment_entry) = crate::ui::components::labeled_entry("Comment");
-    let (exec_row, exec_entry) = crate::ui::components::labeled_entry("Exec*");
-    let (icon_row, icon_entry) = crate::ui::components::labeled_entry("Icon");
+
+    // Exec row with left executable icon inside the entry
+    let exec_row = GtkBox::new(Orientation::Horizontal, 8);
+    let exec_lbl = gtk4::Label::new(Some("Exec*"));
+    exec_lbl.set_halign(Align::End);
+    exec_lbl.set_xalign(1.0);
+    exec_lbl.set_width_chars(18);
+    let exec_entry = Entry::new();
+    exec_entry.set_hexpand(true);
+    exec_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some("application-x-executable-symbolic"));
+    exec_row.append(&exec_lbl);
+    exec_row.append(&exec_entry);
+
+    // Icon row with dynamic icon preview inside the entry (left)
+    let icon_row = GtkBox::new(Orientation::Horizontal, 8);
+    let icon_lbl = gtk4::Label::new(Some("Icon"));
+    icon_lbl.set_halign(Align::End);
+    icon_lbl.set_xalign(1.0);
+    icon_lbl.set_width_chars(18);
+    let icon_entry = Entry::new();
+    icon_entry.set_hexpand(true);
+    icon_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing"));
+    icon_row.append(&icon_lbl);
+    icon_row.append(&icon_entry);
+
+    // Live update of icon preview when path/name changes (icon inside Entry)
+    {
+        icon_entry.connect_changed(move |e| {
+            let txt = e.text().to_string();
+            if txt.trim().is_empty() {
+                e.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing"));
+            } else if txt.contains('/') {
+                // File path -> try to load texture
+                let f = File::for_path(&txt);
+                match gdk::Texture::from_file(&f) {
+                    Ok(tex) => e.set_icon_from_paintable(EntryIconPosition::Primary, Some(&tex)),
+                    Err(_) => e.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing")),
+                }
+            } else {
+                // Themed icon name
+                e.set_icon_from_icon_name(EntryIconPosition::Primary, Some(&txt));
+            }
+        });
+    }
 
     // File chooser buttons for Exec and Icon
     let exec_btn = Button::with_label("Select...");
@@ -149,7 +204,11 @@ pub fn show_main_window(app: &Application) {
         let icon_entry_c2 = icon_entry_c.clone();
         dialog.connect_response(move |d, resp| {
             if resp == ResponseType::Accept {
-                if let Some(file) = d.file() { if let Some(path) = file.path() { icon_entry_c2.set_text(path.to_string_lossy().as_ref()); } }
+                if let Some(file) = d.file() { if let Some(path) = file.path() { 
+                    let txt = path.to_string_lossy().to_string();
+                    icon_entry_c2.set_text(&txt);
+                    // The changed signal will update the entry's icon.
+                } }
             }
             d.close();
         });
@@ -171,10 +230,33 @@ pub fn show_main_window(app: &Application) {
     type_row.append(&type_label);
     type_row.append(&type_combo);
 
-    // Checkbuttons
+    // Checkbuttons (aligned rows)
     let terminal_check = CheckButton::with_label("Run in Terminal");
+    let terminal_row = GtkBox::new(Orientation::Horizontal, 8);
+    let terminal_spacer = gtk4::Label::new(None);
+    terminal_spacer.set_halign(Align::End);
+    terminal_spacer.set_xalign(1.0);
+    terminal_spacer.set_width_chars(18);
+    terminal_row.append(&terminal_spacer);
+    terminal_row.append(&terminal_check);
+
     let nodisplay_check = CheckButton::with_label("NoDisplay");
+    let nodisplay_row = GtkBox::new(Orientation::Horizontal, 8);
+    let nodisplay_spacer = gtk4::Label::new(None);
+    nodisplay_spacer.set_halign(Align::End);
+    nodisplay_spacer.set_xalign(1.0);
+    nodisplay_spacer.set_width_chars(18);
+    nodisplay_row.append(&nodisplay_spacer);
+    nodisplay_row.append(&nodisplay_check);
+
     let startup_check = CheckButton::with_label("StartupNotify");
+    let startup_row = GtkBox::new(Orientation::Horizontal, 8);
+    let startup_spacer = gtk4::Label::new(None);
+    startup_spacer.set_halign(Align::End);
+    startup_spacer.set_xalign(1.0);
+    startup_spacer.set_width_chars(18);
+    startup_row.append(&startup_spacer);
+    startup_row.append(&startup_check);
 
     // List-like entries
     let (categories_row, categories_entry) = crate::ui::components::labeled_entry("Categories (;) ");
@@ -227,13 +309,13 @@ pub fn show_main_window(app: &Application) {
     basic_box.append(&name_row);
     basic_box.append(&exec_row);
     basic_box.append(&icon_row);
-    basic_box.append(&terminal_check);
+    basic_box.append(&terminal_row);
 
     // Advanced tab
     advanced_box.append(&generic_name_row);
     advanced_box.append(&comment_row);
-    advanced_box.append(&nodisplay_check);
-    advanced_box.append(&startup_check);
+    advanced_box.append(&nodisplay_row);
+    advanced_box.append(&startup_row);
     advanced_box.append(&categories_row);
     advanced_box.append(&mimetype_row);
     advanced_box.append(&keywords_row);
@@ -357,6 +439,19 @@ pub fn show_main_window(app: &Application) {
             comment_entry.set_text(de.comment.as_deref().unwrap_or(""));
             exec_entry.set_text(&de.exec);
             icon_entry.set_text(de.icon.as_deref().unwrap_or(""));
+            // Update icon preview (inside entry)
+            let txt = icon_entry.text().to_string();
+            if txt.trim().is_empty() {
+                icon_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing"));
+            } else if txt.contains('/') {
+                let f = File::for_path(&txt);
+                match gdk::Texture::from_file(&f) {
+                    Ok(tex) => icon_entry.set_icon_from_paintable(EntryIconPosition::Primary, Some(&tex)),
+                    Err(_) => icon_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing")),
+                }
+            } else {
+                icon_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some(&txt));
+            }
             terminal_check.set_active(de.terminal);
             nodisplay_check.set_active(de.no_display);
             startup_check.set_active(de.startup_notify);
