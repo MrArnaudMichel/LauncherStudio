@@ -30,6 +30,12 @@ pub struct EntryWidgets {
     pub localized_gname: TextView,
     pub localized_comment: TextView,
     pub extra_kv: TextView,
+    // Controls for dynamic Exec/URL row
+    pub exec_lbl: Label,
+    pub exec_app_box: GtkBox,
+    pub exec_link_box: GtkBox,
+    pub exec_btn: Button,
+    pub url_btn: Button,
 }
 
 pub struct Editor {
@@ -79,7 +85,7 @@ pub fn build_editor() -> Editor {
     let (generic_name_row, generic_name_entry) = crate::ui::components::labeled_entry("Generic Name");
     let (comment_row, comment_entry) = crate::ui::components::labeled_entry("Comment");
 
-    // Exec
+    // Exec / URL row (dynamic)
     let exec_row = GtkBox::new(Orientation::Horizontal, 8);
     let exec_lbl = Label::new(Some("Exec*"));
     exec_lbl.set_halign(gtk4::Align::End);
@@ -89,8 +95,11 @@ pub fn build_editor() -> Editor {
     exec_entry.set_hexpand(true);
     exec_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some("application-x-executable-symbolic"));
     exec_row.append(&exec_lbl);
-    exec_row.append(&exec_entry);
-    // File chooser for Exec
+
+    // Application input box: Exec entry + Select button
+    let exec_app_box = GtkBox::new(Orientation::Horizontal, 6);
+    exec_app_box.set_hexpand(true);
+    exec_app_box.append(&exec_entry);
     let exec_btn = Button::with_label("Select...");
     exec_btn.connect_clicked({
         let exec_entry_c = exec_entry.clone();
@@ -106,7 +115,13 @@ pub fn build_editor() -> Editor {
             dialog.show();
         }
     });
-    exec_row.append(&exec_btn);
+    exec_app_box.append(&exec_btn);
+    exec_row.append(&exec_app_box);
+
+    // Link/Folder input box: URL entry + Select button
+    let exec_link_box = GtkBox::new(Orientation::Horizontal, 6);
+    exec_link_box.set_hexpand(true);
+    // url_entry will be appended after it is created below
 
     // Icon with dynamic preview inside entry (left)
     let icon_row = GtkBox::new(Orientation::Horizontal, 8);
@@ -197,6 +212,80 @@ pub fn build_editor() -> Editor {
     let (path_row, path_entry) = crate::ui::components::labeled_entry("Working Dir (Path)");
     let (url_row, url_entry) = crate::ui::components::labeled_entry("URL (Type=Link)");
 
+    // Make Path field clickable via secondary icon to open directory/file
+    path_entry.set_icon_from_icon_name(EntryIconPosition::Secondary, Some("folder-open-symbolic"));
+    path_entry.set_icon_activatable(EntryIconPosition::Secondary, true);
+    path_entry.set_icon_sensitive(EntryIconPosition::Secondary, true);
+    path_entry.set_tooltip_text(Some("Ouvrir le dossier dans le gestionnaire de fichiers"));
+    {
+        let _path_entry_c = path_entry.clone();
+        path_entry.connect_icon_press(move |e, pos| {
+            if pos == EntryIconPosition::Secondary {
+                let txt = e.text().to_string();
+                if !txt.trim().is_empty() {
+                    if let Err(err) = open::that(&txt) {
+                        eprintln!("Failed to open path {}: {}", txt, err);
+                    }
+                }
+            }
+        });
+    }
+
+    // Make URL field clickable via secondary icon to open in browser
+    url_entry.set_icon_from_icon_name(EntryIconPosition::Secondary, Some("external-link-symbolic"));
+    url_entry.set_icon_activatable(EntryIconPosition::Secondary, true);
+    url_entry.set_icon_sensitive(EntryIconPosition::Secondary, true);
+    url_entry.set_tooltip_text(Some("Ouvrir le lien dans le navigateur"));
+    {
+        let _url_entry_c = url_entry.clone();
+        url_entry.connect_icon_press(move |e, pos| {
+            if pos == EntryIconPosition::Secondary {
+                let txt = e.text().to_string();
+                if !txt.trim().is_empty() {
+                    if let Err(err) = open::that(&txt) {
+                        eprintln!("Failed to open URL {}: {}", txt, err);
+                    }
+                }
+            }
+        });
+    }
+
+    // Complete dynamic Exec/URL row wiring
+    exec_link_box.append(&url_entry);
+    // Add a Select... button for Link/Folder to pick file or directory
+    let url_btn = Button::with_label("Select...");
+    {
+        let url_entry_c = url_entry.clone();
+        let type_combo_c = type_combo.clone();
+        url_btn.connect_clicked(move |_| {
+            let ty = type_combo_c.active_text().map(|s| s.to_string()).unwrap_or_else(|| "Application".into());
+            let is_dir = ty == "Directory";
+            let action = if is_dir { FileChooserAction::SelectFolder } else { FileChooserAction::Open };
+            let dialog = FileChooserDialog::new(
+                Some(if is_dir { "Select Folder" } else { "Select File or Folder" }),
+                None::<&gtk4::ApplicationWindow>,
+                action,
+                &[("Cancel", gtk4::ResponseType::Cancel), ("Open", gtk4::ResponseType::Accept)]
+            );
+            let url_entry_c2 = url_entry_c.clone();
+            dialog.connect_response(move |d, resp| {
+                if resp == gtk4::ResponseType::Accept {
+                    if let Some(file) = d.file() { if let Some(path) = file.path() {
+                        let mut s = path.to_string_lossy().to_string();
+                        // Prefix with file:// for proper URL
+                        if !s.starts_with("file://") { s = format!("file://{}", s); }
+                        url_entry_c2.set_text(&s);
+                    } }
+                }
+                d.close();
+            });
+            dialog.show();
+        });
+    }
+    exec_link_box.append(&url_btn);
+    exec_link_box.set_visible(false);
+    exec_row.append(&exec_link_box);
+
     // Localized fields and extras
     let localized_label = Label::new(Some("Localized fields (one per line: lang=value). Keys: Name, GenericName, Comment. Example: fr=Mon App"));
     localized_label.set_wrap(true);
@@ -237,7 +326,8 @@ pub fn build_editor() -> Editor {
     advanced_box.append(&notshowin_row);
     advanced_box.append(&tryexec_row);
     advanced_box.append(&path_row);
-    advanced_box.append(&url_row);
+    // URL shown in Basic when Type=Link
+    // advanced_box.append(&url_row);
 
     advanced_box.append(&localized_label);
     advanced_box.append(&Label::new(Some("Name[lang]=value lines")));
@@ -299,7 +389,23 @@ pub fn build_editor() -> Editor {
         localized_gname,
         localized_comment,
         extra_kv,
+        exec_lbl,
+        exec_app_box,
+        exec_link_box,
+        exec_btn,
+        url_btn,
     };
+
+    // Initialize type-dependent field sensitivity
+    apply_type_rules(&widgets);
+    // React to type changes to re-apply rules
+    {
+        let w2 = widgets.clone();
+        let tc = widgets.type_combo.clone();
+        tc.connect_changed(move |_| {
+            apply_type_rules(&w2);
+        });
+    }
 
     Editor { notebook, source_view, widgets }
 }
@@ -361,6 +467,96 @@ pub fn set_form_from_entry(w: &EntryWidgets, de: &DesktopEntry) {
     // Extra
     let extra: Vec<String> = de.extra.iter().map(|(k,v)| format!("{}={}", k, v)).collect();
     w.extra_kv.buffer().set_text(&extra.join("\n"));
+
+    // Apply type rules after setting fields
+    apply_type_rules(w);
+}
+
+pub fn apply_type_rules(w: &EntryWidgets) {
+    let ty = w.type_combo.active_text().map(|s| s.to_string()).unwrap_or_else(|| "Application".into());
+    let is_app = ty == "Application";
+    let is_link = ty == "Link";
+    let is_dir = ty == "Directory";
+
+    // Toggle dynamic Exec/URL row visibility and label
+    if is_app {
+        w.exec_lbl.set_visible(true);
+        w.exec_lbl.set_text("Exec*");
+        w.exec_app_box.set_visible(true);
+        w.exec_link_box.set_visible(false);
+        // For Application, URL button is irrelevant
+        w.url_btn.set_visible(false);
+    } else if is_link {
+        w.exec_lbl.set_visible(true);
+        w.exec_lbl.set_text("URL*");
+        w.exec_app_box.set_visible(false);
+        w.exec_link_box.set_visible(true);
+        // Link: only a text entry (no chooser button)
+        w.url_btn.set_visible(false);
+    } else {
+        // Directory (Folder): show text entry + chooser button
+        w.exec_lbl.set_visible(true);
+        w.exec_lbl.set_text("Folder*");
+        w.exec_app_box.set_visible(false);
+        w.exec_link_box.set_visible(true);
+        w.url_btn.set_visible(true);
+    }
+
+    // Base off: then enable per type
+    // Turn all related fields off by default
+    w.exec_entry.set_sensitive(false); w.exec_entry.set_text("");
+    w.tryexec_entry.set_sensitive(false); w.tryexec_entry.set_text("");
+    w.terminal_check.set_sensitive(false); w.terminal_check.set_active(false);
+    w.path_entry.set_sensitive(false); w.path_entry.set_text("");
+    w.url_entry.set_sensitive(false); // will be enabled for Link/Directory below
+    w.startup_check.set_sensitive(false); w.startup_check.set_active(false);
+    w.actions_entry.set_sensitive(false); w.actions_entry.set_text("");
+
+    // Leave these always enabled: name, icon, generic/comment, visibility, categories, etc.
+    w.name_entry.set_sensitive(true);
+    w.generic_name_entry.set_sensitive(true);
+    w.comment_entry.set_sensitive(true);
+    w.icon_entry.set_sensitive(true);
+    w.nodisplay_check.set_sensitive(true);
+    w.categories_entry.set_sensitive(true);
+    w.mimetype_entry.set_sensitive(true);
+    w.keywords_entry.set_sensitive(true);
+    w.onlyshowin_entry.set_sensitive(true);
+    w.notshowin_entry.set_sensitive(true);
+    w.localized_name.set_sensitive(true);
+    w.localized_gname.set_sensitive(true);
+    w.localized_comment.set_sensitive(true);
+    w.extra_kv.set_sensitive(true);
+
+    if is_app {
+        w.exec_entry.set_sensitive(true);
+        w.tryexec_entry.set_sensitive(true);
+        w.terminal_check.set_sensitive(true);
+        w.path_entry.set_sensitive(true);
+        w.startup_check.set_sensitive(true);
+        w.actions_entry.set_sensitive(true);
+        w.url_entry.set_sensitive(false); w.url_entry.set_text("");
+    } else if is_link {
+        // URL text entry only
+        w.url_entry.set_sensitive(true);
+        // Ensure app-specific fields are cleared
+        w.exec_entry.set_text("");
+        w.tryexec_entry.set_text("");
+        w.path_entry.set_text("");
+        w.terminal_check.set_active(false);
+        w.startup_check.set_active(false);
+        w.actions_entry.set_text("");
+    } else if is_dir {
+        // Directory: URL text entry + chooser button; keep app-specific disabled and cleared
+        w.url_entry.set_sensitive(true);
+        w.exec_entry.set_text("");
+        w.tryexec_entry.set_text("");
+        w.path_entry.set_text("");
+        // Do not clear url_entry so user input persists when switching types
+        w.terminal_check.set_active(false);
+        w.startup_check.set_active(false);
+        w.actions_entry.set_text("");
+    }
 }
 
 pub fn collect_entry(w: &EntryWidgets) -> Result<DesktopEntry, String> {
@@ -603,5 +799,10 @@ fn clone_widgets(w: &EntryWidgets) -> EntryWidgets {
         localized_gname: w.localized_gname.clone(),
         localized_comment: w.localized_comment.clone(),
         extra_kv: w.extra_kv.clone(),
+        exec_lbl: w.exec_lbl.clone(),
+        exec_app_box: w.exec_app_box.clone(),
+        exec_link_box: w.exec_link_box.clone(),
+        exec_btn: w.exec_btn.clone(),
+        url_btn: w.url_btn.clone(),
     }
 }

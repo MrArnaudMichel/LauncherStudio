@@ -160,7 +160,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
     // Helpers
 
     let set_form_from_entry = {
-        let type_combo = type_combo.clone();
+        let type_combo = editor.widgets.type_combo.clone();
         let name_entry = name_entry.clone();
         let generic_name_entry = generic_name_entry.clone();
         let comment_entry = comment_entry.clone();
@@ -326,6 +326,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let set_form = set_form_from_entry.clone();
         let status_label = status_label.clone();
         let remove_temp_row_c = remove_temp_row.clone();
+        let type_combo_sel = type_combo.clone();
         listbox.connect_row_activated(move |_, row| {
             // Ignore activation on temporary in-edit row
             if row.widget_name() == ":unsaved" {
@@ -340,6 +341,8 @@ pub fn show_main_window(app: &impl IsA<Application>) {
             match DesktopReader::read_from_path(&path) {
                 Ok(de) => {
                     set_form(&de);
+                    // Existing entry: lock type selection
+                    type_combo_sel.set_sensitive(false);
                     state_c.borrow_mut().selected_path = Some(path.clone());
                     status_label.set_text(&path.to_string_lossy());
                 }
@@ -356,6 +359,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let status_label = status_label.clone();
         let set_form = set_form_from_entry.clone();
         let ensure_temp_row_c = ensure_temp_row.clone();
+        let type_combo_new_btn = editor.widgets.type_combo.clone();
         btn_new.connect_clicked(move |_| {
             // Clear form by setting empty entry
             set_form(&DesktopEntry { name: String::new(), type_field: "Application".into(), ..Default::default() });
@@ -364,6 +368,8 @@ pub fn show_main_window(app: &impl IsA<Application>) {
             st.in_edit = true;
             drop(st);
             (ensure_temp_row_c)();
+            // New entry: allow changing type
+            type_combo_new_btn.set_sensitive(true);
             status_label.set_text("New entry");
         });
     }
@@ -372,19 +378,21 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let set_form = set_form_from_entry.clone();
         let remove_temp_row_c = remove_temp_row.clone();
         let state_c2 = state.clone();
+        let type_combo_open_btn = editor.widgets.type_combo.clone();
         btn_open.connect_clicked(move |_| {
             let dialog = FileChooserDialog::new(Some("Open .desktop"), None::<&ApplicationWindow>, FileChooserAction::Open, &[("Cancel", ResponseType::Cancel), ("Open", ResponseType::Accept)]);
             let status_label2 = status_label.clone();
             let set_form2 = set_form.clone();
             let remove_temp_row_c2 = remove_temp_row_c.clone();
             let state_c3 = state_c2.clone();
+            let type_combo_open_btn2 = type_combo_open_btn.clone();
             dialog.connect_response(move |d, resp| {
                 if resp == ResponseType::Accept {
                     (remove_temp_row_c2)();
                     state_c3.borrow_mut().in_edit = false;
                     if let Some(file) = d.file() { if let Some(path) = file.path() {
                         match DesktopReader::read_from_path(&path) {
-                            Ok(de) => { set_form2(&de); status_label2.set_text(&path.to_string_lossy()); }
+                            Ok(de) => { set_form2(&de); type_combo_open_btn2.set_sensitive(false); status_label2.set_text(&path.to_string_lossy()); }
                             Err(e) => status_label2.set_text(&format!("Open failed: {}", e)),
                         }
                     }}
@@ -395,7 +403,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         });
     }
     {
-        let type_combo = type_combo.clone();
+        let type_combo = editor.widgets.type_combo.clone();
         let name_entry = name_entry.clone();
         let generic_name_entry = generic_name_entry.clone();
         let comment_entry = comment_entry.clone();
@@ -445,6 +453,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let new_action = SimpleAction::new("new", None);
         let ensure_temp_row_c = ensure_temp_row.clone();
         let state_new = state.clone();
+        let type_combo_new_action = editor.widgets.type_combo.clone();
         new_action.connect_activate(move |_, _| {
             set_form(&DesktopEntry { name: String::new(), type_field: "Application".into(), ..Default::default() });
             let mut st = state_new.borrow_mut();
@@ -452,6 +461,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
             st.in_edit = true;
             drop(st);
             (ensure_temp_row_c)();
+            type_combo_new_action.set_sensitive(true);
             status_label_new.set_text("New entry");
         });
         app_add_new.add_action(&new_action);
@@ -461,17 +471,19 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let status_label_open = status_label.clone();
         let app_add_open = app.clone();
         let open_action = SimpleAction::new("open", None);
+        let type_combo_open_action = editor.widgets.type_combo.clone();
         let _remove_temp_row_c = remove_temp_row.clone();
         let _state_open = state.clone();
         open_action.connect_activate(move |_, _| {
             let dialog = FileChooserDialog::new(Some("Open .desktop"), None::<&ApplicationWindow>, FileChooserAction::Open, &[("Cancel", ResponseType::Cancel), ("Open", ResponseType::Accept)]);
             let status_label2 = status_label_open.clone();
             let set_form2 = set_form.clone();
+            let type_combo_open_action2 = type_combo_open_action.clone();
             dialog.connect_response(move |d, resp| {
                 if resp == ResponseType::Accept {
                     if let Some(file) = d.file() { if let Some(path) = file.path() {
                         match DesktopReader::read_from_path(&path) {
-                            Ok(de) => { set_form2(&de); status_label2.set_text(&path.to_string_lossy()); }
+                            Ok(de) => { set_form2(&de); type_combo_open_action2.set_sensitive(false); status_label2.set_text(&path.to_string_lossy()); }
                             Err(e) => status_label2.set_text(&format!("Open failed: {}", e)),
                         }
                     }}
@@ -483,7 +495,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         app_add_open.add_action(&open_action);
 
         // app.save
-        let type_combo = type_combo.clone();
+        let type_combo = editor.widgets.type_combo.clone();
         let name_entry = name_entry.clone();
         let generic_name_entry = generic_name_entry.clone();
         let comment_entry = comment_entry.clone();
@@ -579,7 +591,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
             about_win.set_application_name("Desktop Entry Manager");
             about_win.set_developer_name("Arnaud Michel");
             about_win.set_version(env!("CARGO_PKG_VERSION"));
-            about_win.set_website("https://github.com/");
+            about_win.set_website("https://launcherstudio.arnaudmichel.fr/");
             about_win.set_issue_url("https://github.com/MrArnaudMichel/launcherstudio/issues");
             about_win.present(Some(&win_for_about));
         });
@@ -624,6 +636,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let set_form = set_form_from_entry.clone();
         let status_label_del = status_label.clone();
         let refresh = refresh_list.clone();
+        let type_combo_del = editor.widgets.type_combo.clone();
         delete_btn.connect_clicked(move |_| {
             let maybe_path = state_del.borrow().selected_path.clone();
             if let Some(path) = maybe_path {
@@ -641,6 +654,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
                 let state_del_c = state_del.clone();
                 let refresh_c = refresh.clone();
                 let status_label_del_c = status_label_del.clone();
+                let type_combo_del2 = type_combo_del.clone();
                 dialog.connect_response(move |d, resp| {
                     if resp == ResponseType::Accept {
                         if let Err(e) = fs::remove_file(&path) {
@@ -649,6 +663,8 @@ pub fn show_main_window(app: &impl IsA<Application>) {
                         } else {
                             // Clear form
                             set_form_c(&DesktopEntry { name: String::new(), type_field: "Application".into(), ..Default::default() });
+                            // Allow changing type after deletion (blank state)
+                            type_combo_del2.set_sensitive(true);
                             // Reset selection
                             state_del_c.borrow_mut().selected_path = None;
                             // Refresh list
