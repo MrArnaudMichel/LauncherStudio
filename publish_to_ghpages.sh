@@ -1,29 +1,27 @@
 #!/bin/bash
-# Script pour publier le dossier debian/ sur la branche gh-pages de votre dépôt GitHub
 set -e
 
-# Vérifie que le dossier debian/ existe
 if [ ! -d "debian" ]; then
-  echo "Le dossier debian/ n'existe pas. Exécutez d'abord build_and_publish.sh."
+  echo "Le dossier debian/ n'existe pas."
   exit 1
 fi
 
-# Crée un dossier temporaire pour le commit
-TMP_DIR=$(mktemp -d)
-cp -r debian/* "$TMP_DIR/"
+# Ajoute le worktree (créé s’il n’existe pas déjà)
+if ! git show-ref --verify --quiet refs/heads/gh-pages; then
+  git worktree add -b gh-pages /tmp/gh-pages
+else
+  git worktree add /tmp/gh-pages gh-pages
+fi
 
-cd "$TMP_DIR"
+# Copie le contenu sans écraser .git
+rsync -av --delete --exclude '.git' debian/ /tmp/gh-pages/
 
-git checkout -b gh-pages
-
-
+# Commit et push
+cd /tmp/gh-pages
 git add .
-git commit -m "Publish debian repo for APT updates"
-git push --force origin gh-pages
+git commit -m "Publish debian repo for APT updates" || echo "Aucun changement à publier."
+git push origin gh-pages
 
+# Nettoyage du worktree
 cd -
-rm -rf "$TMP_DIR"
-
-echo "Publication terminée sur la branche gh-pages !"
-echo "Vérifiez les paramètres GitHub Pages pour pointer sur la branche gh-pages et le dossier racine."
-
+git worktree remove /tmp/gh-pages
