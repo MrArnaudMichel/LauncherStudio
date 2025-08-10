@@ -2,7 +2,7 @@ use crate::domain::desktop_entry::DesktopEntry;
 use anyhow::{anyhow, Context, Result};
 use directories::BaseDirs;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 
 pub struct DesktopWriter;
 

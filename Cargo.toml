@@ -1,5 +1,5 @@
 [package]
-name = "DesktopFileManager"
+name = "desktop_app"
 version = "0.1.0"
 edition = "2024"
 description = "A GTK4 desktop application for creating and managing .desktop files on Linux."

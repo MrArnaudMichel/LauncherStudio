@@ -3,19 +3,6 @@
 version = 4
 
 [[package]]
-name = "DesktopFileManager"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "directories",
- "gio 0.18.4",
- "glib 0.18.5",
- "gtk4",
- "open",
- "thiserror",
-]
-
-[[package]]
 name = "anyhow"
 version = "1.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -72,6 +59,19 @@ name = "cfg-if"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268"
+
+[[package]]
+name = "desktop_app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "directories",
+ "gio 0.18.4",
+ "glib 0.18.5",
+ "gtk4",
+ "open",
+ "thiserror",
+]
 
 [[package]]
 name = "directories"
