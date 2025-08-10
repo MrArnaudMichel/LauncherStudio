@@ -1,6 +1,8 @@
 use gtk4::prelude::*;
-use gtk4::{self, Align, Application, ApplicationWindow, Box as GtkBox, Button, FileChooserDialog, FileChooserAction, HeaderBar, Orientation, ResponseType, ScrolledWindow, Label, Image, ListBoxRow, ToggleButton, Settings};
+use gtk4::{self, Align, Application, ApplicationWindow, Box as GtkBox, Button, FileChooserDialog, FileChooserAction, Orientation, ResponseType, ScrolledWindow, Label, Image, ListBoxRow, ToggleButton};
 use gtk4::gio::SimpleAction;
+use adw::{ApplicationWindow as AdwApplicationWindow, HeaderBar as AdwHeaderBar, StyleManager, ColorScheme, ToolbarView, AboutWindow};
+use adw::prelude::*;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -9,20 +11,20 @@ use crate::domain::desktop_entry::DesktopEntry;
 use crate::services::desktop_writer::DesktopWriter;
 use crate::services::desktop_reader::DesktopReader;
 
-pub fn show_main_window(app: &Application) {
-    let win = ApplicationWindow::builder()
-        .application(app)
+pub fn show_main_window(app: &impl IsA<Application>) {
+    // Upcast and take a strong reference to GtkApplication (works for both Gtk and Adw apps)
+    let app: Application = app.upcast_ref::<Application>().clone();
+
+    let win = AdwApplicationWindow::builder()
+        .application(&app)
         .title("Desktop Entry Manager")
         .default_width(1000)
         .default_height(700)
         .resizable(true)
         .build();
 
-    // App icon (asset renamed in repo to custom-app-icon.png)
-    win.set_icon_name(Some("assets/custom-app-icon.png"));
-
-    // Header bar stays minimal (title), we build our own menu + toolbar below
-    let header = HeaderBar::new();
+    // Header bar (Libadwaita) stays minimal (title), we build our own menu + toolbar below
+    let header = AdwHeaderBar::new();
 
     // Theme toggle (dark/light) button placed at the right side of the header bar,
     // which is visually left of the window close button in GNOME CSD.
@@ -33,35 +35,38 @@ pub fn show_main_window(app: &Application) {
     theme_btn.set_tooltip_text(Some("Toggle dark theme"));
     header.pack_end(&theme_btn);
 
-    // Initialize from current GTK setting and wire toggling
-    if let Some(settings) = Settings::default() {
-        let is_dark: bool = settings.property::<bool>("gtk-application-prefer-dark-theme");
-        theme_btn.set_active(is_dark);
-        let initial_icon = if is_dark { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
-        theme_icon.set_icon_name(Some(initial_icon));
+    // Initialize from Adwaita style manager and wire toggling
+    let style_manager = StyleManager::default();
+    let is_dark = style_manager.is_dark();
+    theme_btn.set_active(is_dark);
+    let initial_icon = if is_dark { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
+    theme_icon.set_icon_name(Some(initial_icon));
 
-        let theme_icon_c = theme_icon.clone();
-        theme_btn.connect_toggled(move |btn| {
-            let active = btn.is_active();
-            if let Some(settings) = Settings::default() {
-                // Best-effort: set property; ignore errors
-                let _ = settings.set_property("gtk-application-prefer-dark-theme", &active);
-            }
-            let name = if active { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
-            theme_icon_c.set_icon_name(Some(name));
-        });
-    }
+    let theme_icon_c = theme_icon.clone();
+    let style_manager_c = style_manager.clone();
+    theme_btn.connect_toggled(move |btn| {
+        let active = btn.is_active();
+        // Force dark/light according to toggle
+        if active {
+            style_manager_c.set_color_scheme(ColorScheme::ForceDark);
+        } else {
+            style_manager_c.set_color_scheme(ColorScheme::ForceLight);
+        }
+        let name = if active { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
+        theme_icon_c.set_icon_name(Some(name));
+    });
 
-    win.set_titlebar(Some(&header));
+    // Use ToolbarView to blend the window bar with app content
+    header.add_css_class("flat");
 
     let root = GtkBox::new(Orientation::Vertical, 6);
-    root.set_margin_top(12);
+    root.set_margin_top(0);
     root.set_margin_bottom(12);
     root.set_margin_start(12);
     root.set_margin_end(12);
 
     // Top Menu Bar (PopoverMenuBar with gio::Menu)
-    let menubar = crate::ui::components::menu_bar::build_menu_bar(app, &win);
+    let menubar = crate::ui::components::menu_bar::build_menu_bar(&app);
 
     // Toolbar with icons: New, Open, Save, Refresh (icon-only buttons)
     let crate::ui::components::toolbar::Toolbar { container: toolbar, btn_new, btn_open, btn_save, btn_refresh } = crate::ui::components::toolbar::build_toolbar();
@@ -130,7 +135,11 @@ pub fn show_main_window(app: &Application) {
     root.append(&buttons);
     root.append(&status_bar);
 
-    win.set_child(Some(&root));
+    // Put content inside a ToolbarView to fuse the header with the app surface
+    let toolbar_view = ToolbarView::new();
+    toolbar_view.add_top_bar(&header);
+    toolbar_view.set_content(Some(&root));
+    win.set_content(Some(&toolbar_view));
 
     // Simple app state
     #[derive(Default, Clone)]
@@ -231,6 +240,7 @@ pub fn show_main_window(app: &Application) {
                         hb.append(&lbl);
                         row.set_child(Some(&hb));
                         row.set_selectable(true);
+                        row.add_css_class("activatable");
                         // store path on row via data
                         row.set_widget_name(&path.to_string_lossy());
                         listbox.append(&row);
@@ -430,6 +440,77 @@ pub fn show_main_window(app: &Application) {
         quit_action.connect_activate(move |_, _| { app_for_quit.quit(); });
         app_for_add.add_action(&quit_action);
 
+        // Tools: open system applications dir
+        let app_for_add = app.clone();
+        let open_sys = SimpleAction::new("open_system_dir", None);
+        let win_err = win.clone();
+        open_sys.connect_activate(move |_, _| {
+            #[cfg(target_os = "linux")]
+            {
+                let path = std::path::Path::new("/usr/share/applications");
+                if let Err(e) = open::that(path) {
+                    show_error(&win_err, &format!("Failed to open system dir: {}", e));
+                }
+            }
+        });
+        app_for_add.add_action(&open_sys);
+
+        // Tools: open user applications dir
+        let app_for_add = app.clone();
+        let open_user = SimpleAction::new("open_user_dir", None);
+        let win_err2 = win.clone();
+        open_user.connect_activate(move |_, _| {
+            #[cfg(target_os = "linux")]
+            {
+                if let Some(base) = directories::BaseDirs::new() {
+                    let path = base.data_dir().join("applications");
+                    if let Err(e) = open::that(&path) {
+                        show_error(&win_err2, &format!("Failed to open user dir: {}", e));
+                    }
+                } else {
+                    show_error(&win_err2, "Cannot resolve user data dir");
+                }
+            }
+        });
+        app_for_add.add_action(&open_user);
+
+        // Help: About dialog
+        let app_for_add = app.clone();
+        let about = SimpleAction::new("about", None);
+        let win_for_about = win.clone();
+        about.connect_activate(move |_, _| {
+            let about_win = AboutWindow::builder()
+                .transient_for(&win_for_about)
+                .modal(true)
+                .application_name("Desktop Entry Manager")
+                .developer_name("Arnaud Michel")
+                .version(env!("CARGO_PKG_VERSION"))
+                .website("https://github.com/")
+                .issue_url("https://github.com/")
+                .build();
+            about_win.present();
+        });
+        app_for_add.add_action(&about);
+
+        // Credits: simple dialog
+        let app_for_add = app.clone();
+        let credits = SimpleAction::new("credits", None);
+        let win_for_credits = win.clone();
+        credits.connect_activate(move |_, _| {
+            let text = "Desktop Entry Manager\n\nCredits:\n- Author: Arnaud Michel\n- UI: GTK4 + Libadwaita";
+            let dialog = gtk4::MessageDialog::builder()
+                .transient_for(&win_for_credits)
+                .modal(true)
+                .title("Credits")
+                .text("Thanks for using Desktop Entry Manager")
+                .secondary_text(text)
+                .build();
+            dialog.add_button("Close", ResponseType::Close);
+            dialog.connect_response(|d, _| d.close());
+            dialog.show();
+        });
+        app_for_add.add_action(&credits);
+
         // win.toggle_fullscreen
         let win_c = win.clone();
         let toggle_fullscreen = SimpleAction::new("toggle_fullscreen", None);
@@ -610,7 +691,7 @@ pub fn show_main_window(app: &Application) {
 
 
 
-fn show_error(parent: &ApplicationWindow, msg: &str) {
+fn show_error<W: IsA<gtk4::Window>>(parent: &W, msg: &str) {
     let dialog = gtk4::MessageDialog::builder()
         .transient_for(parent)
         .modal(true)

@@ -12,6 +12,9 @@ pub fn build_sidebar() -> Sidebar {
         .vexpand(true)
         .build();
     let listbox = ListBox::new();
+    // Apply Adwaita navigation sidebar styling
+    listbox.add_css_class("navigation-sidebar");
+    listbox.set_selection_mode(gtk4::SelectionMode::Single);
     container.set_child(Some(&listbox));
     Sidebar { container, listbox }
 }

@@ -11,6 +11,7 @@ anyhow = "1.0.98"
 
 # GTK4 and Libadwaita for GNOME apps
 gtk4 = "0.10.0"
+adw = { package = "libadwaita", version = "0.8.0", features = ["v1_6"] }
 # GLib/GIO
 gio = "0.21.1"
 glib = "0.21.1"
