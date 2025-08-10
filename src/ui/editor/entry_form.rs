@@ -241,15 +241,27 @@ pub fn build_editor() -> Editor {
 
     advanced_box.append(&localized_label);
     advanced_box.append(&Label::new(Some("Name[lang]=value lines")));
-    advanced_box.append(&localized_name);
+    let localized_name_sw = ScrolledWindow::builder().hexpand(true).vexpand(false).build();
+    localized_name_sw.add_css_class("frame");
+    localized_name_sw.set_child(Some(&localized_name));
+    advanced_box.append(&localized_name_sw);
     advanced_box.append(&Label::new(Some("GenericName[lang]=value lines")));
-    advanced_box.append(&localized_gname);
+    let localized_gname_sw = ScrolledWindow::builder().hexpand(true).vexpand(false).build();
+    localized_gname_sw.add_css_class("frame");
+    localized_gname_sw.set_child(Some(&localized_gname));
+    advanced_box.append(&localized_gname_sw);
     advanced_box.append(&Label::new(Some("Comment[lang]=value lines")));
-    advanced_box.append(&localized_comment);
+    let localized_comment_sw = ScrolledWindow::builder().hexpand(true).vexpand(false).build();
+    localized_comment_sw.add_css_class("frame");
+    localized_comment_sw.set_child(Some(&localized_comment));
+    advanced_box.append(&localized_comment_sw);
 
     advanced_box.append(&actions_row);
     advanced_box.append(&extra_label);
-    advanced_box.append(&extra_kv);
+    let extra_kv_sw = ScrolledWindow::builder().hexpand(true).vexpand(false).build();
+    extra_kv_sw.add_css_class("frame");
+    extra_kv_sw.set_child(Some(&extra_kv));
+    advanced_box.append(&extra_kv_sw);
 
     // Assemble notebook
     let basic_scroll = ScrolledWindow::builder().hexpand(true).vexpand(true).build();
@@ -257,6 +269,7 @@ pub fn build_editor() -> Editor {
     let adv_scroll = ScrolledWindow::builder().hexpand(true).vexpand(true).build();
     adv_scroll.set_child(Some(&advanced_box));
     let source_scroll = ScrolledWindow::builder().hexpand(true).vexpand(true).build();
+    source_scroll.add_css_class("frame");
     source_scroll.set_child(Some(&source_view));
 
     notebook.append_page(&basic_scroll, Some(&Label::new(Some("Basic"))));

@@ -1,0 +1,11 @@
+scrolledwindow.frame {
+    border-radius: 8px;
+}
+
+textview {
+    border-radius: 6px;
+}
+
+entry {
+    border-radius: 6px;
+}

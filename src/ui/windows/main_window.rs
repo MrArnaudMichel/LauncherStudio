@@ -22,6 +22,14 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         .resizable(true)
         .build();
 
+    // Inject a tiny bit of border radius for framed scrollers and inputs
+    {
+        let provider = gtk4::CssProvider::new();
+        provider.load_from_data("scrolledwindow.frame { border-radius: 8px; }\ntextview { border-radius: 6px; }\nentry { border-radius: 6px; }\n");
+        if let Some(display) = gtk4::gdk::Display::default() {
+            gtk4::style_context_add_provider_for_display(&display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION);
+        }
+    }
     // Header bar (Libadwaita) stays minimal (title), we build our own menu + toolbar below
     let header = AdwHeaderBar::new();
 
