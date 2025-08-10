@@ -1,8 +1,6 @@
 use gtk4::prelude::*;
-use gtk4::{self, Align, Application, ApplicationWindow, Box as GtkBox, Button, CheckButton, ComboBoxText, Entry, EntryIconPosition, FileChooserAction, FileChooserDialog, HeaderBar, Orientation, ResponseType, ScrolledWindow, TextView, Notebook, ListBox, ListBoxRow, Label, PopoverMenuBar, Image};
-use gtk4::prelude::FileExt;
-use gtk4::gio::{Menu, SimpleAction, File};
-use gtk4::gdk;
+use gtk4::{self, Align, Application, ApplicationWindow, Box as GtkBox, Button, FileChooserDialog, FileChooserAction, HeaderBar, Orientation, ResponseType, ScrolledWindow, Label, Image, ListBoxRow};
+use gtk4::gio::SimpleAction;
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -34,326 +32,58 @@ pub fn show_main_window(app: &Application) {
     root.set_margin_end(12);
 
     // Top Menu Bar (PopoverMenuBar with gio::Menu)
-    let menu_model = Menu::new();
-
-    // File menu
-    let file_menu = Menu::new();
-    file_menu.append(Some("New"), Some("app.new"));
-    file_menu.append(Some("Open"), Some("app.open"));
-    file_menu.append(Some("Save"), Some("app.save"));
-    file_menu.append(Some("Refresh"), Some("app.refresh"));
-    file_menu.append(Some("Quit"), Some("app.quit"));
-    menu_model.append_submenu(Some("File"), &file_menu);
-
-    // View menu
-    let view_menu = Menu::new();
-    view_menu.append(Some("Toggle Fullscreen"), Some("win.toggle_fullscreen"));
-    menu_model.append_submenu(Some("View"), &view_menu);
-
-    // Tools / Help / Credits placeholders
-    let tools_menu = Menu::new();
-    menu_model.append_submenu(Some("Tools"), &tools_menu);
-    let help_menu = Menu::new();
-    menu_model.append_submenu(Some("Help"), &help_menu);
-    let credits_menu = Menu::new();
-    menu_model.append_submenu(Some("Credits"), &credits_menu);
-
-    let menubar = PopoverMenuBar::from_model(Some(&menu_model));
+    let menubar = crate::ui::components::menu_bar::build_menu_bar(app, &win);
 
     // Toolbar with icons: New, Open, Save, Refresh (icon-only buttons)
-    let toolbar = GtkBox::new(Orientation::Horizontal, 6);
-
-    let btn_new = Button::new();
-    let img_new = Image::from_icon_name("list-add-symbolic");
-    img_new.set_pixel_size(18);
-    btn_new.set_child(Some(&img_new));
-    btn_new.set_tooltip_text(Some("New .desktop"));
-
-    let btn_open = Button::new();
-    let img_open = Image::from_icon_name("document-open-symbolic");
-    img_open.set_pixel_size(18);
-    btn_open.set_child(Some(&img_open));
-    btn_open.set_tooltip_text(Some("Open"));
-
-    let btn_save = Button::new();
-    let img_save = Image::from_icon_name("document-save-symbolic");
-    img_save.set_pixel_size(18);
-    btn_save.set_child(Some(&img_save));
-    btn_save.set_tooltip_text(Some("Save"));
-
-    let btn_refresh = Button::new();
-    let img_refresh = Image::from_icon_name("view-refresh-symbolic");
-    img_refresh.set_pixel_size(18);
-    btn_refresh.set_child(Some(&img_refresh));
-    btn_refresh.set_tooltip_text(Some("Refresh"));
-
-    toolbar.append(&btn_new);
-    toolbar.append(&btn_open);
-    toolbar.append(&btn_save);
-    toolbar.append(&btn_refresh);
+    let crate::ui::components::toolbar::Toolbar { container: toolbar, btn_new, btn_open, btn_save, btn_refresh } = crate::ui::components::toolbar::build_toolbar();
 
     // Main area: sidebar + editor tabs
     let main_area = GtkBox::new(Orientation::Horizontal, 12);
 
     // Sidebar list
-    let sidebar_scroller = ScrolledWindow::builder().min_content_width(240).vexpand(true).build();
-    let listbox = ListBox::new();
-    sidebar_scroller.set_child(Some(&listbox));
+    let crate::ui::components::sidebar::Sidebar { container: sidebar_scroller, listbox } = crate::ui::components::sidebar::build_sidebar();
 
-    // Editor: Notebook with Basic / Advanced / Source
-    let notebook = Notebook::new();
-
-    let basic_box = GtkBox::new(Orientation::Vertical, 8);
-    basic_box.set_margin_top(12);
-    basic_box.set_margin_bottom(12);
-    basic_box.set_margin_start(12);
-    basic_box.set_margin_end(12);
-    let advanced_box = GtkBox::new(Orientation::Vertical, 8);
-    advanced_box.set_margin_top(12);
-    advanced_box.set_margin_bottom(12);
-    advanced_box.set_margin_start(12);
-    advanced_box.set_margin_end(12);
-    let source_view = TextView::new();
-    source_view.set_monospace(true);
-    source_view.set_margin_top(12);
-    source_view.set_margin_bottom(12);
-    source_view.set_margin_start(12);
-    source_view.set_margin_end(12);
 
     // Bottom status bar
-    let status_bar = GtkBox::new(Orientation::Horizontal, 6);
-    let status_label = Label::new(Some("No file selected"));
-    status_label.set_xalign(0.0);
-    status_bar.append(&status_label);
+    let crate::ui::components::status_bar::StatusBar { container: status_bar, label: status_label } = crate::ui::components::status_bar::build_status_bar();
 
-    // Form containers (old form split will be inserted into basic/advanced below)
+    // Editor (modular): build the entire Basic/Advanced/Source notebook
+    let editor = crate::ui::editor::entry_form::build_editor();
     let scroller = ScrolledWindow::builder().hexpand(true).vexpand(true).build();
-    let form = GtkBox::new(Orientation::Vertical, 8);
+    scroller.set_child(Some(&editor.notebook));
 
-    // Basic fields
-    let (name_row, name_entry) = crate::ui::components::labeled_entry("Name*");
-    let (generic_name_row, generic_name_entry) = crate::ui::components::labeled_entry("Generic Name");
-    let (comment_row, comment_entry) = crate::ui::components::labeled_entry("Comment");
+    // Expose editor widgets locally to reuse existing wiring below
+    let type_combo = editor.widgets.type_combo.clone();
+    let name_entry = editor.widgets.name_entry.clone();
+    let generic_name_entry = editor.widgets.generic_name_entry.clone();
+    let comment_entry = editor.widgets.comment_entry.clone();
+    let exec_entry = editor.widgets.exec_entry.clone();
+    let icon_entry = editor.widgets.icon_entry.clone();
+    let terminal_check = editor.widgets.terminal_check.clone();
+    let nodisplay_check = editor.widgets.nodisplay_check.clone();
+    let startup_check = editor.widgets.startup_check.clone();
+    let categories_entry = editor.widgets.categories_entry.clone();
+    let mimetype_entry = editor.widgets.mimetype_entry.clone();
+    let keywords_entry = editor.widgets.keywords_entry.clone();
+    let onlyshowin_entry = editor.widgets.onlyshowin_entry.clone();
+    let notshowin_entry = editor.widgets.notshowin_entry.clone();
+    let tryexec_entry = editor.widgets.tryexec_entry.clone();
+    let path_entry = editor.widgets.path_entry.clone();
+    let url_entry = editor.widgets.url_entry.clone();
+    let actions_entry = editor.widgets.actions_entry.clone();
+    let localized_name = editor.widgets.localized_name.clone();
+    let localized_gname = editor.widgets.localized_gname.clone();
+    let localized_comment = editor.widgets.localized_comment.clone();
+    let extra_kv = editor.widgets.extra_kv.clone();
+    let source_view = editor.source_view.clone();
 
-    // Exec row with left executable icon inside the entry
-    let exec_row = GtkBox::new(Orientation::Horizontal, 8);
-    let exec_lbl = gtk4::Label::new(Some("Exec*"));
-    exec_lbl.set_halign(Align::End);
-    exec_lbl.set_xalign(1.0);
-    exec_lbl.set_width_chars(18);
-    let exec_entry = Entry::new();
-    exec_entry.set_hexpand(true);
-    exec_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some("application-x-executable-symbolic"));
-    exec_row.append(&exec_lbl);
-    exec_row.append(&exec_entry);
-
-    // Icon row with dynamic icon preview inside the entry (left)
-    let icon_row = GtkBox::new(Orientation::Horizontal, 8);
-    let icon_lbl = gtk4::Label::new(Some("Icon"));
-    icon_lbl.set_halign(Align::End);
-    icon_lbl.set_xalign(1.0);
-    icon_lbl.set_width_chars(18);
-    let icon_entry = Entry::new();
-    icon_entry.set_hexpand(true);
-    icon_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing"));
-    icon_row.append(&icon_lbl);
-    icon_row.append(&icon_entry);
-
-    // Live update of icon preview when path/name changes (icon inside Entry)
-    {
-        icon_entry.connect_changed(move |e| {
-            let txt = e.text().to_string();
-            if txt.trim().is_empty() {
-                e.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing"));
-            } else if txt.contains('/') {
-                // File path -> try to load texture
-                let f = File::for_path(&txt);
-                match gdk::Texture::from_file(&f) {
-                    Ok(tex) => e.set_icon_from_paintable(EntryIconPosition::Primary, Some(&tex)),
-                    Err(_) => e.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing")),
-                }
-            } else {
-                // Themed icon name
-                e.set_icon_from_icon_name(EntryIconPosition::Primary, Some(&txt));
-            }
-        });
-    }
-
-    // File chooser buttons for Exec and Icon
-    let exec_btn = Button::with_label("Select...");
-    let win_c = win.clone();
-    let exec_entry_c = exec_entry.clone();
-    exec_btn.connect_clicked(move |_| {
-        let dialog = FileChooserDialog::new(Some("Select Executable"), Some(&win_c), FileChooserAction::Open, &[("Cancel", ResponseType::Cancel), ("Open", ResponseType::Accept)]);
-        let exec_entry_c2 = exec_entry_c.clone();
-        dialog.connect_response(move |d, resp| {
-            if resp == ResponseType::Accept {
-                if let Some(file) = d.file() { if let Some(path) = file.path() { exec_entry_c2.set_text(path.to_string_lossy().as_ref()); } }
-            }
-            d.close();
-        });
-        dialog.show();
-    });
-    exec_row.append(&exec_btn);
-
-    let icon_btn = Button::with_label("Select...");
-    let win_c2 = win.clone();
-    let icon_entry_c = icon_entry.clone();
-    icon_btn.connect_clicked(move |_| {
-        let dialog = FileChooserDialog::new(Some("Select Icon"), Some(&win_c2), FileChooserAction::Open, &[("Cancel", ResponseType::Cancel), ("Open", ResponseType::Accept)]);
-        let icon_entry_c2 = icon_entry_c.clone();
-        dialog.connect_response(move |d, resp| {
-            if resp == ResponseType::Accept {
-                if let Some(file) = d.file() { if let Some(path) = file.path() { 
-                    let txt = path.to_string_lossy().to_string();
-                    icon_entry_c2.set_text(&txt);
-                    // The changed signal will update the entry's icon.
-                } }
-            }
-            d.close();
-        });
-        dialog.show();
-    });
-    icon_row.append(&icon_btn);
-
-    // Type
-    let type_row = GtkBox::new(Orientation::Horizontal, 8);
-    let type_label = gtk4::Label::new(Some("Type*"));
-    type_label.set_halign(Align::End);
-    type_label.set_xalign(1.0);
-    type_label.set_width_chars(18);
-    let type_combo = ComboBoxText::new();
-    type_combo.append_text("Application");
-    type_combo.append_text("Link");
-    type_combo.append_text("Directory");
-    type_combo.set_active(Some(0));
-    type_row.append(&type_label);
-    type_row.append(&type_combo);
-
-    // Checkbuttons (aligned rows)
-    let terminal_check = CheckButton::with_label("Run in Terminal");
-    let terminal_row = GtkBox::new(Orientation::Horizontal, 8);
-    let terminal_spacer = gtk4::Label::new(None);
-    terminal_spacer.set_halign(Align::End);
-    terminal_spacer.set_xalign(1.0);
-    terminal_spacer.set_width_chars(18);
-    terminal_row.append(&terminal_spacer);
-    terminal_row.append(&terminal_check);
-
-    let nodisplay_check = CheckButton::with_label("NoDisplay");
-    let nodisplay_row = GtkBox::new(Orientation::Horizontal, 8);
-    let nodisplay_spacer = gtk4::Label::new(None);
-    nodisplay_spacer.set_halign(Align::End);
-    nodisplay_spacer.set_xalign(1.0);
-    nodisplay_spacer.set_width_chars(18);
-    nodisplay_row.append(&nodisplay_spacer);
-    nodisplay_row.append(&nodisplay_check);
-
-    let startup_check = CheckButton::with_label("StartupNotify");
-    let startup_row = GtkBox::new(Orientation::Horizontal, 8);
-    let startup_spacer = gtk4::Label::new(None);
-    startup_spacer.set_halign(Align::End);
-    startup_spacer.set_xalign(1.0);
-    startup_spacer.set_width_chars(18);
-    startup_row.append(&startup_spacer);
-    startup_row.append(&startup_check);
-
-    // List-like entries
-    let (categories_row, categories_entry) = crate::ui::components::labeled_entry("Categories (;) ");
-    let (mimetype_row, mimetype_entry) = crate::ui::components::labeled_entry("MimeType (;) ");
-    let (keywords_row, keywords_entry) = crate::ui::components::labeled_entry("Keywords (;) ");
-    let (onlyshowin_row, onlyshowin_entry) = crate::ui::components::labeled_entry("OnlyShowIn (;) ");
-    let (notshowin_row, notshowin_entry) = crate::ui::components::labeled_entry("NotShowIn (;) ");
-
-    // Optional fields
-    let (tryexec_row, tryexec_entry) = crate::ui::components::labeled_entry("TryExec");
-    let (path_row, path_entry) = crate::ui::components::labeled_entry("Working Dir (Path)");
-    let (url_row, url_entry) = crate::ui::components::labeled_entry("URL (Type=Link)");
-
-    // Localized Name/Comment/GenericName additions (simple: text area specifying lang=value per line)
-    let localized_label = gtk4::Label::new(Some("Localized fields (one per line: lang=value). Keys: Name, GenericName, Comment. Example: fr=Mon App"));
-    localized_label.set_wrap(true);
-    let localized_name = TextView::new();
-    localized_name.set_monospace(true);
-    localized_name.set_size_request(-1, 60);
-    let localized_gname = TextView::new();
-    localized_gname.set_monospace(true);
-    localized_gname.set_size_request(-1, 60);
-    let localized_comment = TextView::new();
-    localized_comment.set_monospace(true);
-    localized_comment.set_size_request(-1, 60);
-
-    let (actions_row, actions_entry) = crate::ui::components::labeled_entry("Actions (names;)");
-
-    // Extra key=value text area
-    let extra_label = gtk4::Label::new(Some("Extra key=value lines (advanced)"));
-    extra_label.set_wrap(true);
-    let extra_kv = TextView::new();
-    extra_kv.set_monospace(true);
-    extra_kv.set_size_request(-1, 120);
-
-    // Filename entry
-    let (filename_row, filename_entry) = crate::ui::components::labeled_entry("File name (without .desktop)");
-
-    // Buttons
+    // Buttons for Preview/Save
     let buttons = GtkBox::new(Orientation::Horizontal, 8);
     buttons.set_halign(Align::End);
     let preview_btn = Button::with_label("Preview");
     let save_btn = Button::with_label("Save .desktop");
     buttons.append(&preview_btn);
     buttons.append(&save_btn);
-
-    // Assemble form into tabs
-    // Basic tab minimal fields
-    basic_box.append(&type_row);
-    basic_box.append(&name_row);
-    basic_box.append(&exec_row);
-    basic_box.append(&icon_row);
-    basic_box.append(&terminal_row);
-
-    // Advanced tab
-    advanced_box.append(&generic_name_row);
-    advanced_box.append(&comment_row);
-    advanced_box.append(&nodisplay_row);
-    advanced_box.append(&startup_row);
-    advanced_box.append(&categories_row);
-    advanced_box.append(&mimetype_row);
-    advanced_box.append(&keywords_row);
-    advanced_box.append(&onlyshowin_row);
-    advanced_box.append(&notshowin_row);
-    advanced_box.append(&tryexec_row);
-    advanced_box.append(&path_row);
-    advanced_box.append(&url_row);
-
-    // Localized sections
-    advanced_box.append(&localized_label);
-    advanced_box.append(&gtk4::Label::new(Some("Name[lang]=value lines")));
-    advanced_box.append(&localized_name);
-    advanced_box.append(&gtk4::Label::new(Some("GenericName[lang]=value lines")));
-    advanced_box.append(&localized_gname);
-    advanced_box.append(&gtk4::Label::new(Some("Comment[lang]=value lines")));
-    advanced_box.append(&localized_comment);
-
-    advanced_box.append(&actions_row);
-    advanced_box.append(&extra_label);
-    advanced_box.append(&extra_kv);
-    advanced_box.append(&filename_row);
-
-    // Notebook assembly
-    let basic_label = gtk4::Label::new(Some("Basic"));
-    let advanced_label = gtk4::Label::new(Some("Advanced"));
-    let source_label = gtk4::Label::new(Some("Source"));
-    let basic_scroll = ScrolledWindow::builder().hexpand(true).vexpand(true).build();
-    basic_scroll.set_child(Some(&basic_box));
-    let adv_scroll = ScrolledWindow::builder().hexpand(true).vexpand(true).build();
-    adv_scroll.set_child(Some(&advanced_box));
-    let source_scroll = ScrolledWindow::builder().hexpand(true).vexpand(true).build();
-    source_scroll.set_child(Some(&source_view));
-    notebook.append_page(&basic_scroll, Some(&basic_label));
-    notebook.append_page(&adv_scroll, Some(&advanced_label));
-    notebook.append_page(&source_scroll, Some(&source_label));
-
-    scroller.set_child(Some(&notebook));
 
     // Main area composition
     main_area.append(&sidebar_scroller);
@@ -374,38 +104,6 @@ pub fn show_main_window(app: &Application) {
     let state = Rc::new(RefCell::new(UiState::default()));
 
     // Helpers
-    let update_source = {
-        let type_combo = type_combo.clone();
-        let name_entry = name_entry.clone();
-        let generic_name_entry = generic_name_entry.clone();
-        let comment_entry = comment_entry.clone();
-        let exec_entry = exec_entry.clone();
-        let icon_entry = icon_entry.clone();
-        let terminal_check = terminal_check.clone();
-        let nodisplay_check = nodisplay_check.clone();
-        let startup_check = startup_check.clone();
-        let categories_entry = categories_entry.clone();
-        let mimetype_entry = mimetype_entry.clone();
-        let keywords_entry = keywords_entry.clone();
-        let onlyshowin_entry = onlyshowin_entry.clone();
-        let notshowin_entry = notshowin_entry.clone();
-        let tryexec_entry = tryexec_entry.clone();
-        let path_entry = path_entry.clone();
-        let url_entry = url_entry.clone();
-        let actions_entry = actions_entry.clone();
-        let localized_name = localized_name.clone();
-        let localized_gname = localized_gname.clone();
-        let localized_comment = localized_comment.clone();
-        let extra_kv = extra_kv.clone();
-        let source_view = source_view.clone();
-        move || {
-            if let Ok(de) = collect_entry(&type_combo, &name_entry, &generic_name_entry, &comment_entry, &exec_entry, &icon_entry, &terminal_check, &nodisplay_check, &startup_check, &categories_entry, &mimetype_entry, &keywords_entry, &onlyshowin_entry, &notshowin_entry, &tryexec_entry, &path_entry, &url_entry, &actions_entry, &localized_name, &localized_gname, &localized_comment, &extra_kv) {
-                let content = de.to_ini_string();
-                let buf = source_view.buffer();
-                buf.set_text(&content);
-            }
-        }
-    };
 
     let set_form_from_entry = {
         let type_combo = type_combo.clone();
@@ -439,19 +137,6 @@ pub fn show_main_window(app: &Application) {
             comment_entry.set_text(de.comment.as_deref().unwrap_or(""));
             exec_entry.set_text(&de.exec);
             icon_entry.set_text(de.icon.as_deref().unwrap_or(""));
-            // Update icon preview (inside entry)
-            let txt = icon_entry.text().to_string();
-            if txt.trim().is_empty() {
-                icon_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing"));
-            } else if txt.contains('/') {
-                let f = File::for_path(&txt);
-                match gdk::Texture::from_file(&f) {
-                    Ok(tex) => icon_entry.set_icon_from_paintable(EntryIconPosition::Primary, Some(&tex)),
-                    Err(_) => icon_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some("image-missing")),
-                }
-            } else {
-                icon_entry.set_icon_from_icon_name(EntryIconPosition::Primary, Some(&txt));
-            }
             terminal_check.set_active(de.terminal);
             nodisplay_check.set_active(de.no_display);
             startup_check.set_active(de.startup_notify);
@@ -603,7 +288,7 @@ pub fn show_main_window(app: &Application) {
         let extra_kv = extra_kv.clone();
         let status_label = status_label.clone();
         btn_save.connect_clicked(move |_| {
-            match collect_entry(&type_combo, &name_entry, &generic_name_entry, &comment_entry, &exec_entry, &icon_entry, &terminal_check, &nodisplay_check, &startup_check, &categories_entry, &mimetype_entry, &keywords_entry, &onlyshowin_entry, &notshowin_entry, &tryexec_entry, &path_entry, &url_entry, &actions_entry, &localized_name, &localized_gname, &localized_comment, &extra_kv) {
+            match crate::ui::helpers::collect_entry(&type_combo, &name_entry, &generic_name_entry, &comment_entry, &exec_entry, &icon_entry, &terminal_check, &nodisplay_check, &startup_check, &categories_entry, &mimetype_entry, &keywords_entry, &onlyshowin_entry, &notshowin_entry, &tryexec_entry, &path_entry, &url_entry, &actions_entry, &localized_name, &localized_gname, &localized_comment, &extra_kv) {
                 Ok(de) => {
                     let fname = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
                     match DesktopWriter::write(&de, &fname, false) {
@@ -684,7 +369,7 @@ pub fn show_main_window(app: &Application) {
         let app_c = app.clone();
         let save_action = SimpleAction::new("save", None);
         save_action.connect_activate(move |_, _| {
-            match collect_entry(&type_combo, &name_entry, &generic_name_entry, &comment_entry, &exec_entry, &icon_entry, &terminal_check, &nodisplay_check, &startup_check, &categories_entry, &mimetype_entry, &keywords_entry, &onlyshowin_entry, &notshowin_entry, &tryexec_entry, &path_entry, &url_entry, &actions_entry, &localized_name, &localized_gname, &localized_comment, &extra_kv) {
+            match crate::ui::helpers::collect_entry(&type_combo, &name_entry, &generic_name_entry, &comment_entry, &exec_entry, &icon_entry, &terminal_check, &nodisplay_check, &startup_check, &categories_entry, &mimetype_entry, &keywords_entry, &onlyshowin_entry, &notshowin_entry, &tryexec_entry, &path_entry, &url_entry, &actions_entry, &localized_name, &localized_gname, &localized_comment, &extra_kv) {
                 Ok(de) => {
                     let fname = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
                     match DesktopWriter::write(&de, &fname, false) {
@@ -748,7 +433,7 @@ pub fn show_main_window(app: &Application) {
     let extra_kv_preview = extra_kv.clone();
     let win_preview = win.clone();
     preview_btn.connect_clicked(move |_| {
-        let entry = collect_entry(
+        let entry = crate::ui::helpers::collect_entry(
             &type_combo_preview, &name_entry_preview, &generic_name_entry_preview, &comment_entry_preview, &exec_entry_preview, &icon_entry_preview,
             &terminal_check_preview, &nodisplay_check_preview, &startup_check_preview, &categories_entry_preview, &mimetype_entry_preview,
             &keywords_entry_preview, &onlyshowin_entry_preview, &notshowin_entry_preview, &tryexec_entry_preview, &path_entry_preview,
@@ -795,18 +480,17 @@ pub fn show_main_window(app: &Application) {
     let localized_gname_save = localized_gname.clone();
     let localized_comment_save = localized_comment.clone();
     let extra_kv_save = extra_kv.clone();
-    let filename_entry_save = filename_entry.clone();
     let win_save = win.clone();
     save_btn.connect_clicked(move |_| {
-        let entry = collect_entry(
+        let entry = crate::ui::helpers::collect_entry(
             &type_combo_save, &name_entry_save, &generic_name_entry_save, &comment_entry_save, &exec_entry_save, &icon_entry_save,
             &terminal_check_save, &nodisplay_check_save, &startup_check_save, &categories_entry_save, &mimetype_entry_save,
             &keywords_entry_save, &onlyshowin_entry_save, &notshowin_entry_save, &tryexec_entry_save, &path_entry_save,
             &url_entry_save, &actions_entry_save, &localized_name_save, &localized_gname_save, &localized_comment_save, &extra_kv_save
         );
-        let file_name = filename_entry_save.text().to_string();
         match entry {
             Ok(de) => {
+                let file_name = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
                 match DesktopWriter::write(&de, &file_name, false) {
                     Ok(path) => {
                         let dialog = gtk4::MessageDialog::builder()
@@ -839,118 +523,7 @@ pub fn show_main_window(app: &Application) {
     win.present();
 }
 
-fn collect_entry(
-    type_combo: &ComboBoxText,
-    name_entry: &Entry,
-    generic_name_entry: &Entry,
-    comment_entry: &Entry,
-    exec_entry: &Entry,
-    icon_entry: &Entry,
-    terminal_check: &CheckButton,
-    nodisplay_check: &CheckButton,
-    startup_check: &CheckButton,
-    categories_entry: &Entry,
-    mimetype_entry: &Entry,
-    keywords_entry: &Entry,
-    onlyshowin_entry: &Entry,
-    notshowin_entry: &Entry,
-    tryexec_entry: &Entry,
-    path_entry: &Entry,
-    url_entry: &Entry,
-    actions_entry: &Entry,
-    localized_name: &TextView,
-    localized_gname: &TextView,
-    localized_comment: &TextView,
-    extra_kv: &TextView,
-) -> Result<DesktopEntry, String> {
-    let type_field = type_combo.active_text().map(|s| s.to_string()).unwrap_or_else(|| "Application".into());
-    let name = name_entry.text().to_string();
-    let generic_name = opt_text(generic_name_entry);
-    let comment = opt_text(comment_entry);
-    let exec = exec_entry.text().to_string();
-    let icon = opt_text(icon_entry);
-    let terminal = terminal_check.is_active();
-    let no_display = nodisplay_check.is_active();
-    let startup_notify = startup_check.is_active();
-    let categories = split_semicolon(categories_entry);
-    let mime_type = split_semicolon(mimetype_entry);
-    let keywords = split_semicolon(keywords_entry);
-    let only_show_in = split_semicolon(onlyshowin_entry);
-    let not_show_in = split_semicolon(notshowin_entry);
-    let try_exec = opt_text(tryexec_entry);
-    let path = opt_text(path_entry);
-    let url = opt_text(url_entry);
-    let actions = split_semicolon(actions_entry);
-    let name_localized = parse_lang_lines(&buffer_text(localized_name));
-    let generic_name_localized = parse_lang_lines(&buffer_text(localized_gname));
-    let comment_localized = parse_lang_lines(&buffer_text(localized_comment));
-    let extra = parse_kv_lines(&buffer_text(extra_kv));
 
-    let de = DesktopEntry {
-        type_field,
-        name,
-        generic_name,
-        comment,
-        exec,
-        icon,
-        terminal,
-        categories,
-        mime_type,
-        keywords,
-        only_show_in,
-        not_show_in,
-        no_display,
-        startup_notify,
-        try_exec,
-        path,
-        url,
-        actions,
-        extra,
-        name_localized,
-        generic_name_localized,
-        comment_localized,
-    };
-
-    de.validate()?;
-    Ok(de)
-}
-
-fn split_semicolon(e: &Entry) -> Vec<String> { e.text().split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect() }
-fn opt_text(e: &Entry) -> Option<String> { let s = e.text().trim().to_string(); if s.is_empty() { None } else { Some(s) } }
-
-fn buffer_text(tv: &TextView) -> String {
-    let buf = tv.buffer();
-    buf.text(&buf.start_iter(), &buf.end_iter(), true).to_string()
-}
-
-fn parse_lang_lines(s: &str) -> Vec<(String, String)> {
-    // Lines in form: lang=value ; ignore empty lines
-    s.lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() { return None; }
-            if let Some((lang, val)) = line.split_once('=') {
-                let lang = lang.trim().to_string();
-                let val = val.trim().to_string();
-                if lang.is_empty() || val.is_empty() { None } else { Some((lang, val)) }
-            } else { None }
-        })
-        .collect()
-}
-
-fn parse_kv_lines(s: &str) -> Vec<(String, String)> {
-    s.lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() { return None; }
-            if let Some((k, v)) = line.split_once('=') {
-                let k = k.trim().to_string();
-                let v = v.trim().to_string();
-                if k.is_empty() { None } else { Some((k, v)) }
-            } else { None }
-        })
-        .collect()
-}
 
 fn show_error(parent: &ApplicationWindow, msg: &str) {
     let dialog = gtk4::MessageDialog::builder()

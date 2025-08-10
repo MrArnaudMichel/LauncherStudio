@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/README.md">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/README.md" />
+              <option name="originalContent" value="# Desktop Entry Creator&#10;&#10;A GTK4 desktop application for creating and managing `.desktop` files on Linux.&#10;&#10;## Features&#10;- GUI for creating `.desktop` launchers&#10;- Supports all major desktop entry fields&#10;- Localized fields and advanced options&#10;- Saves to `~/.local/share/applications`&#10;&#10;## Getting Started&#10;&#10;### Prerequisites&#10;- Rust (latest stable)&#10;- GTK4 development libraries&#10;&#10;### Build and Run&#10;```bash&#10;git clone https://github.com/yourusername/desktop_app.git&#10;cd desktop_app&#10;cargo build --release&#10;./target/release/desktop_app&#10;```" />
+              <option name="updatedContent" value="# Desktop Entry Creator&#10;&#10;A GTK4 desktop application for creating and managing `.desktop` files on Linux.&#10;&#10;## Features&#10;- GUI for creating `.desktop` launchers&#10;- Supports all major desktop entry fields&#10;- Localized fields and advanced options&#10;- Saves to `~/.local/share/applications`&#10;&#10;## Getting Started&#10;&#10;### Prerequisites&#10;- Rust (latest stable)&#10;- GTK4 development libraries&#10;&#10;### Build and Run&#10;```bash&#10;git clone https://github.com/yourusername/desktop_app.git&#10;cd desktop_app&#10;cargo build --release&#10;./target/release/desktop_app&#10;```&#10;&#10;## Build, Package, and Publish&#10;&#10;### 1. Générer le paquet et le repo APT&#10;```bash&#10;./build_and_publish.sh&#10;```&#10;Ce script :&#10;- Compile l'application en release&#10;- Génère le .deb&#10;- Met à jour le dossier debian/ et Packages.gz&#10;&#10;### 2. Publier sur GitHub Pages&#10;```bash&#10;./publish_to_ghpages.sh&#10;```&#10;Ce script :&#10;- Publie le contenu du dossier debian/ sur la branche gh-pages&#10;- Met à jour le dépôt distant&#10;&#10;### 3. Configuration GitHub Pages&#10;- Dans les paramètres du dépôt, configurez GitHub Pages pour pointer sur la branche gh-pages et le dossier racine.&#10;&#10;### 4. Mise à jour pour les utilisateurs&#10;- Les utilisateurs ayant ajouté votre dépôt APT verront les mises à jour dans leur gestionnaire d'applications.&#10;&#10;## Dépendances&#10;- Rust&#10;- cargo-deb&#10;- dpkg-scanpackages&#10;- git&#10;- rsync" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+        <entry key="$PROJECT_DIR$/build_and_publish.sh">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/build_and_publish.sh" />
+              <option name="updatedContent" value="#!/bin/bash&#10;# Script d'automatisation du build, packaging .deb et génération du repo APT pour GitHub Pages&#10;set -e&#10;&#10;# 1. Build Rust en release&#10;cargo build --release&#10;&#10;# 2. Génère le paquet .deb&#10;cargo deb&#10;&#10;# 3. Copie le .deb dans le dossier debian/&#10;DEB_FILE=$(ls target/debian/*.deb | head -n1)&#10;cp &quot;$DEB_FILE&quot; debian/&#10;&#10;# 4. Nettoie les anciens .deb dans debian/ (garde le dernier)&#10;find debian/ -name '*.deb' ! -newer &quot;$DEB_FILE&quot; -delete&#10;&#10;# 5. Génère Packages.gz&#10;cd debian&#10;rm -f Packages.gz&#10;# Ignore le warning override file&#10; dpkg-scanpackages . /dev/null | gzip -9c &gt; Packages.gz&#10;cd ..&#10;&#10;# 6. Instructions pour publier sur GitHub Pages&#10;cat &lt;&lt;EOF&#10;&#10;Build et packaging terminés !&#10;Pour publier sur GitHub Pages :&#10;- Commitez et poussez le dossier debian/ sur la branche gh-pages ou main selon votre configuration.&#10;- Vérifiez que GitHub Pages est activé sur le dossier debian/.&#10;EOF&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

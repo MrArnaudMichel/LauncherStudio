@@ -1,3 +1,8 @@
+pub mod menu_bar;
+pub mod toolbar;
+pub mod status_bar;
+pub mod sidebar;
+
 use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, Entry, Label, Orientation};
 
