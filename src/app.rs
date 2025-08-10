@@ -3,7 +3,7 @@ use gtk4::Application;
 
 pub fn run() {
     let app = Application::builder()
-        .application_id("com.example.DesktopEntryCreator")
+        .application_id("fr.arnaudmichel.DesktopEntryCreator")
         .build();
 
     app.connect_activate(|app| {
