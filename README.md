@@ -2,4 +2,4 @@
 
 test affichage de base.
 
-![lien](Packages.gz)
+![lien](http://desktopentrycreator.arnaudmichel.fr/Packages.gz)
