@@ -1,7 +1,10 @@
 [package]
-name = "desktop_app"
+name = "DesktopFileManager"
 version = "0.1.0"
 edition = "2024"
+description = "A GTK4 desktop application for creating and managing .desktop files on Linux."
+license = "MIT"
+authors = ["Arnaud Michel contact@arnaudmichel.fr"]
 
 [dependencies]
 anyhow = "1"
@@ -14,3 +17,6 @@ glib = "0.18"
 # Utilities for locating XDG directories
 directories = "5"
 open = "5"
+
+[package.metadata.deb]
+copyright = "© 2025 Arnaud Michel"
