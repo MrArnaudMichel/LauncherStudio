@@ -16,7 +16,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
 
     let win = AdwApplicationWindow::builder()
         .application(&app)
-        .title("# Launcher Studio")
+        .title("Launcher Studio")
         .default_width(1000)
         .default_height(700)
         .resizable(true)
@@ -239,11 +239,12 @@ pub fn show_main_window(app: &impl IsA<Application>) {
             lbl.set_xalign(0.0);
             hb.append(&lbl);
             row.set_child(Some(&hb));
-            row.set_selectable(false);
+            row.set_selectable(true);
             row.set_sensitive(false); // greyed out look while editing
             row.add_css_class("activatable");
             row.set_widget_name(":unsaved");
             listbox.append(&row);
+            listbox.select_row(Some(&row));
             state.borrow_mut().temp_row = Some(row);
         })
     };
@@ -318,6 +319,10 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let status_label = status_label.clone();
         let remove_temp_row_c = remove_temp_row.clone();
         listbox.connect_row_activated(move |_, row| {
+            // Ignore activation on temporary in-edit row
+            if row.widget_name() == ":unsaved" {
+                return;
+            }
             // If we were editing a new entry, stop and remove temp row
             state_c.borrow_mut().in_edit = false;
             // Remove temp row if present
@@ -448,8 +453,8 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let status_label_open = status_label.clone();
         let app_add_open = app.clone();
         let open_action = SimpleAction::new("open", None);
-        let remove_temp_row_c = remove_temp_row.clone();
-        let state_open = state.clone();
+        let _remove_temp_row_c = remove_temp_row.clone();
+        let _state_open = state.clone();
         open_action.connect_activate(move |_, _| {
             let dialog = FileChooserDialog::new(Some("Open .desktop"), None::<&ApplicationWindow>, FileChooserAction::Open, &[("Cancel", ResponseType::Cancel), ("Open", ResponseType::Accept)]);
             let status_label2 = status_label_open.clone();
