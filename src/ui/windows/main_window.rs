@@ -18,48 +18,41 @@ pub fn show_main_window(app: &Application) {
         .resizable(true)
         .build();
 
+    // App icon (asset renamed in repo to custom-app-icon.png)
+    win.set_icon_name(Some("assets/custom-app-icon.png"));
+
     // Header bar stays minimal (title), we build our own menu + toolbar below
     let header = HeaderBar::new();
 
     // Theme toggle (dark/light) button placed at the right side of the header bar,
     // which is visually left of the window close button in GNOME CSD.
-    let theme_btn = ToggleButton::builder()
-        .icon_name("weather-night-symbolic")
-        .build();
+    let theme_btn = ToggleButton::new();
+    let theme_icon = Image::from_icon_name("weather-night-symbolic");
+    theme_icon.set_pixel_size(16);
+    theme_btn.set_child(Some(&theme_icon));
     theme_btn.set_tooltip_text(Some("Toggle dark theme"));
     header.pack_end(&theme_btn);
 
-    // Initialize from current GTK setting and wire toggling + sync with system changes
+    // Initialize from current GTK setting and wire toggling
     if let Some(settings) = Settings::default() {
         let is_dark: bool = settings.property::<bool>("gtk-application-prefer-dark-theme");
         theme_btn.set_active(is_dark);
         let initial_icon = if is_dark { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
-        theme_btn.set_icon_name(initial_icon);
+        theme_icon.set_icon_name(Some(initial_icon));
 
-        // When user toggles, update preference and button icon
-        let theme_btn_c = theme_btn.clone();
+        let theme_icon_c = theme_icon.clone();
         theme_btn.connect_toggled(move |btn| {
             let active = btn.is_active();
             if let Some(settings) = Settings::default() {
+                // Best-effort: set property; ignore errors
                 let _ = settings.set_property("gtk-application-prefer-dark-theme", &active);
             }
             let name = if active { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
-            btn.set_icon_name(name);
-        });
-
-        // Listen to system preference changes and keep toggle/icon in sync
-        let theme_btn_settings = theme_btn_c.clone();
-        settings.connect_notify_local(Some("gtk-application-prefer-dark-theme"), move |s, _| {
-            let is_dark_now: bool = s.property::<bool>("gtk-application-prefer-dark-theme");
-            theme_btn_settings.set_active(is_dark_now);
-            let icon = if is_dark_now { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
-            theme_btn_settings.set_icon_name(icon);
+            theme_icon_c.set_icon_name(Some(name));
         });
     }
 
     win.set_titlebar(Some(&header));
-
-    win.set_decorated(true);
 
     let root = GtkBox::new(Orientation::Vertical, 6);
     root.set_margin_top(12);
