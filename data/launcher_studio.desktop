@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Launcher Studio
+GenericName=Desktop file editor
+Comment=Create and manage .desktop launchers
+Categories=Utility;GTK;GNOME;
+Exec=launcher_studio
+Icon=launcher_studio
+StartupNotify=true
+X-GNOME-UsesNotifications=true
+Keywords=desktop;launcher;shortcut;editor;gnome;
