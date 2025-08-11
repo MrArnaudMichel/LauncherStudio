@@ -25,7 +25,10 @@ assets = [
     ["data/launcher_studio.desktop", "/usr/share/applications/launcher_studio.desktop", "644"],
     # AppStream metadata
     ["data/launcher_studio.metainfo.xml", "/usr/share/metainfo/launcher_studio.metainfo.xml", "644"],
-    # Icon (rename target to match icon name without spaces)
+    # App icon (rename target to match icon name without spaces)
     ["assets/Launcher Studio Logo Design.png", "/usr/share/icons/hicolor/512x512/apps/launcher_studio.png", "644"],
+    # Bundled symbolic icons for theme toggle
+    ["assets/icons/launcher-studio-weather-night-symbolic.svg", "/usr/share/icons/hicolor/symbolic/apps/launcher-studio-weather-night-symbolic.svg", "644"],
+    ["assets/icons/launcher-studio-weather-sunny-symbolic.svg", "/usr/share/icons/hicolor/symbolic/apps/launcher-studio-weather-sunny-symbolic.svg", "644"],
 ]
 copyright = "© 2025 Arnaud Michel"

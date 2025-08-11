@@ -36,7 +36,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
     // Theme toggle (dark/light) button placed at the right side of the header bar,
     // which is visually left of the window close button in GNOME CSD.
     let theme_btn = ToggleButton::new();
-    let theme_icon = Image::from_icon_name("weather-night-symbolic");
+    let theme_icon = Image::new();
     theme_icon.set_pixel_size(16);
     theme_btn.set_child(Some(&theme_icon));
     theme_btn.set_tooltip_text(Some("Toggle dark theme"));
@@ -46,11 +46,44 @@ pub fn show_main_window(app: &impl IsA<Application>) {
     let style_manager = StyleManager::default();
     let is_dark = style_manager.is_dark();
     theme_btn.set_active(is_dark);
-    let initial_icon = if is_dark { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
-    theme_icon.set_icon_name(Some(initial_icon));
+
+    // Determine whether our custom icons are available in the current icon theme (installed app)
+    let mut file_mode = false;
+    if let Some(display) = gtk4::gdk::Display::default() {
+        let icon_theme = gtk4::IconTheme::for_display(&display);
+        let has_night = icon_theme.has_icon("launcher-studio-weather-night-symbolic");
+        let has_sunny = icon_theme.has_icon("launcher-studio-weather-sunny-symbolic");
+        if has_night && has_sunny {
+            let initial_icon = if is_dark { "launcher-studio-weather-sunny-symbolic" } else { "launcher-studio-weather-night-symbolic" };
+            theme_icon.set_icon_name(Some(initial_icon));
+        } else {
+            file_mode = true;
+        }
+    } else {
+        file_mode = true;
+    }
+
+    // Fallback for dev/uninstalled runs: load icons directly from repository assets
+    const NIGHT_NAME: &str = "launcher-studio-weather-night-symbolic";
+    const SUNNY_NAME: &str = "launcher-studio-weather-sunny-symbolic";
+    const NIGHT_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icons/launcher-studio-weather-night-symbolic.svg");
+    const SUNNY_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icons/launcher-studio-weather-sunny-symbolic.svg");
+
+    if file_mode {
+        let path = if is_dark { SUNNY_FILE } else { NIGHT_FILE };
+        if std::path::Path::new(path).exists() {
+            theme_icon.set_from_file(Some(path));
+        } else {
+            // Last resort: try themed names anyway
+            let fallback = if is_dark { SUNNY_NAME } else { NIGHT_NAME };
+            theme_icon.set_icon_name(Some(fallback));
+        }
+    }
 
     let theme_icon_c = theme_icon.clone();
     let style_manager_c = style_manager.clone();
+    let file_mode_rc = std::rc::Rc::new(std::cell::RefCell::new(file_mode));
+    let file_mode_c = file_mode_rc.clone();
     theme_btn.connect_toggled(move |btn| {
         let active = btn.is_active();
         // Force dark/light according to toggle
@@ -59,8 +92,18 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         } else {
             style_manager_c.set_color_scheme(ColorScheme::ForceLight);
         }
-        let name = if active { "weather-sunny-symbolic" } else { "weather-night-symbolic" };
-        theme_icon_c.set_icon_name(Some(name));
+        if *file_mode_c.borrow() {
+            let path = if active { SUNNY_FILE } else { NIGHT_FILE };
+            if std::path::Path::new(path).exists() {
+                theme_icon_c.set_from_file(Some(path));
+            } else {
+                let name = if active { SUNNY_NAME } else { NIGHT_NAME };
+                theme_icon_c.set_icon_name(Some(name));
+            }
+        } else {
+            let name = if active { SUNNY_NAME } else { NIGHT_NAME };
+            theme_icon_c.set_icon_name(Some(name));
+        }
     });
 
     // Use ToolbarView to blend the window bar with app content

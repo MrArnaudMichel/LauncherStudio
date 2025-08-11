@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="#241f31">
+    <!-- Simple symbolic moon: a circle minus a shifted circle to get crescent -->
+    <path d="M10.5 1.5a6.5 6.5 0 1 0 3.999 11.8A6 6 0 1 1 10.5 1.5z"/>
+  </g>
+</svg>
