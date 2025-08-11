@@ -55,7 +55,7 @@ This script will:
 To publish the APT repository on GitHub Pages (branch `gh-pages`), run:
 
 ```shell
-bash ./publish_to_gh_pages.sh
+bash ./publish_to_ghpages.sh
 ```
 
 
@@ -90,3 +90,5 @@ The following tools are required for development, compilation, and publishing:
 ## License
 
 This application is licensed under the [**MIT License**](LICENSE), allowing free use for personal or commercial purposes.
+
+echo "deb [trusted=yes] https://launcherstudio.arnaudmichel.fr/ ./" | sudo tee /etc/apt/sources.list.d/launcherstudio.list

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Launcher Studio: A GTK4 app for creating and managing .desktop files on Linux."
 license = "MIT"
-authors = ["Arnaud Michel contact@arnaudmichel.fr"]
+authors = ["Arnaud Michel <contact@arnaudmichel.fr>"]
 
 [dependencies]
 anyhow = "1.0.98"
@@ -15,4 +15,17 @@ directories = "6.0.0"
 open = "5.3.2"
 
 [package.metadata.deb]
+maintainer = "Arnaud Michel <contact@arnaudmichel.fr>"
+section = "utils"
+priority = "optional"
+license-file = ["LICENSE"]
+extended-description = "Launcher Studio is a GTK4 application that helps you create and manage .desktop launcher files.\n\nIt provides an easy editor for Name, Comment, Exec, Icon, Categories and more, so you can quickly create launchers for your apps without dealing with syntax errors."
+assets = [
+    # .desktop file
+    ["data/launcher_studio.desktop", "/usr/share/applications/launcher_studio.desktop", "644"],
+    # AppStream metadata
+    ["data/launcher_studio.metainfo.xml", "/usr/share/metainfo/launcher_studio.metainfo.xml", "644"],
+    # Icon (rename target to match icon name without spaces)
+    ["assets/Launcher Studio Logo Design.png", "/usr/share/icons/hicolor/512x512/apps/launcher_studio.png", "644"],
+]
 copyright = "© 2025 Arnaud Michel"
