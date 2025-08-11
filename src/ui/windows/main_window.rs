@@ -435,7 +435,13 @@ pub fn show_main_window(app: &impl IsA<Application>) {
                     state_c3.borrow_mut().in_edit = false;
                     if let Some(file) = d.file() { if let Some(path) = file.path() {
                         match DesktopReader::read_from_path(&path) {
-                            Ok(de) => { set_form2(&de); type_combo_open_btn2.set_sensitive(false); status_label2.set_text(&path.to_string_lossy()); }
+                            Ok(de) => {
+                                set_form2(&de);
+                                type_combo_open_btn2.set_sensitive(false);
+                                // Track the opened path so Save updates this file
+                                state_c3.borrow_mut().selected_path = Some(path.clone());
+                                status_label2.set_text(&path.to_string_lossy());
+                            }
                             Err(e) => status_label2.set_text(&format!("Open failed: {}", e)),
                         }
                     }}
@@ -469,13 +475,21 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let localized_comment = localized_comment.clone();
         let extra_kv = extra_kv.clone();
         let status_label = status_label.clone();
+        let state_c = state.clone();
         btn_save.connect_clicked(move |_| {
             match crate::ui::helpers::collect_entry(&type_combo, &name_entry, &generic_name_entry, &comment_entry, &exec_entry, &icon_entry, &terminal_check, &nodisplay_check, &startup_check, &categories_entry, &mimetype_entry, &keywords_entry, &onlyshowin_entry, &notshowin_entry, &tryexec_entry, &path_entry, &url_entry, &actions_entry, &localized_name, &localized_gname, &localized_comment, &extra_kv) {
                 Ok(de) => {
-                    let fname = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
-                    match DesktopWriter::write(&de, &fname, true) {
-                        Ok(path) => { status_label.set_text(&format!("Saved: {}", path.display())); }
-                        Err(e) => status_label.set_text(&format!("Save failed: {}", e)),
+                    if let Some(path) = state_c.borrow().selected_path.clone() {
+                        match DesktopWriter::write_to_path(&de, &path) {
+                            Ok(_) => { status_label.set_text(&format!("Updated: {}", path.display())); }
+                            Err(e) => status_label.set_text(&format!("Save failed: {}", e)),
+                        }
+                    } else {
+                        let fname = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
+                        match DesktopWriter::write(&de, &fname, true) {
+                            Ok(path) => { status_label.set_text(&format!("Saved: {}", path.display())); }
+                            Err(e) => status_label.set_text(&format!("Save failed: {}", e)),
+                        }
                     }
                 }
                 Err(e) => status_label.set_text(&format!("Invalid: {}", e)),
@@ -516,17 +530,24 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let open_action = SimpleAction::new("open", None);
         let type_combo_open_action = editor.widgets.type_combo.clone();
         let _remove_temp_row_c = remove_temp_row.clone();
-        let _state_open = state.clone();
+        let state_for_open_action = state.clone();
         open_action.connect_activate(move |_, _| {
             let dialog = FileChooserDialog::new(Some("Open .desktop"), None::<&ApplicationWindow>, FileChooserAction::Open, &[("Cancel", ResponseType::Cancel), ("Open", ResponseType::Accept)]);
             let status_label2 = status_label_open.clone();
             let set_form2 = set_form.clone();
             let type_combo_open_action2 = type_combo_open_action.clone();
+            let state_open = state_for_open_action.clone();
             dialog.connect_response(move |d, resp| {
                 if resp == ResponseType::Accept {
                     if let Some(file) = d.file() { if let Some(path) = file.path() {
                         match DesktopReader::read_from_path(&path) {
-                            Ok(de) => { set_form2(&de); type_combo_open_action2.set_sensitive(false); status_label2.set_text(&path.to_string_lossy()); }
+                            Ok(de) => {
+                                set_form2(&de);
+                                type_combo_open_action2.set_sensitive(false);
+                                // Track opened path so Save updates this file
+                                state_open.borrow_mut().selected_path = Some(path.clone());
+                                status_label2.set_text(&path.to_string_lossy());
+                            }
                             Err(e) => status_label2.set_text(&format!("Open failed: {}", e)),
                         }
                     }}
@@ -563,13 +584,21 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         let status_label = status_label.clone();
         let app_c = app.clone();
         let save_action = SimpleAction::new("save", None);
+        let state_c = state.clone();
         save_action.connect_activate(move |_, _| {
             match crate::ui::helpers::collect_entry(&type_combo, &name_entry, &generic_name_entry, &comment_entry, &exec_entry, &icon_entry, &terminal_check, &nodisplay_check, &startup_check, &categories_entry, &mimetype_entry, &keywords_entry, &onlyshowin_entry, &notshowin_entry, &tryexec_entry, &path_entry, &url_entry, &actions_entry, &localized_name, &localized_gname, &localized_comment, &extra_kv) {
                 Ok(de) => {
-                    let fname = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
-                    match DesktopWriter::write(&de, &fname, true) {
-                        Ok(path) => { status_label.set_text(&format!("Saved: {}", path.display())); }
-                        Err(e) => status_label.set_text(&format!("Save failed: {}", e)),
+                    if let Some(path) = state_c.borrow().selected_path.clone() {
+                        match DesktopWriter::write_to_path(&de, &path) {
+                            Ok(_) => { status_label.set_text(&format!("Updated: {}", path.display())); }
+                            Err(e) => status_label.set_text(&format!("Save failed: {}", e)),
+                        }
+                    } else {
+                        let fname = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
+                        match DesktopWriter::write(&de, &fname, true) {
+                            Ok(path) => { status_label.set_text(&format!("Saved: {}", path.display())); }
+                            Err(e) => status_label.set_text(&format!("Save failed: {}", e)),
+                        }
                     }
                 }
                 Err(e) => status_label.set_text(&format!("Invalid: {}", e)),
@@ -799,6 +828,7 @@ pub fn show_main_window(app: &impl IsA<Application>) {
     let localized_comment_save = localized_comment.clone();
     let extra_kv_save = extra_kv.clone();
     let win_save = win.clone();
+    let state_c = state.clone();
     save_btn.connect_clicked(move |_| {
         let entry = crate::ui::helpers::collect_entry(
             &type_combo_save, &name_entry_save, &generic_name_entry_save, &comment_entry_save, &exec_entry_save, &icon_entry_save,
@@ -808,30 +838,58 @@ pub fn show_main_window(app: &impl IsA<Application>) {
         );
         match entry {
             Ok(de) => {
-                let file_name = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
-                match DesktopWriter::write(&de, &file_name, true) {
-                    Ok(path) => {
-                        let dialog = gtk4::MessageDialog::builder()
-                            .transient_for(&win_save)
-                            .modal(true)
-                            .title("Saved")
-                            .text(".desktop file created")
-                            .secondary_text(&format!("Saved to {}", path.display()))
-                            .build();
-                        dialog.add_button("Open Folder", ResponseType::Accept);
-                        dialog.add_button("Close", ResponseType::Close);
-                        dialog.connect_response(move |d, resp| {
-                            if resp == ResponseType::Accept {
-                                #[cfg(target_os = "linux")]
-                                {
-                                    if let Some(parent) = path.parent() { let _ = open::that(parent); }
+                if let Some(sel_path) = state_c.borrow().selected_path.clone() {
+                    match DesktopWriter::write_to_path(&de, &sel_path) {
+                        Ok(_) => {
+                            let sp = sel_path.clone();
+                            let dialog = gtk4::MessageDialog::builder()
+                                .transient_for(&win_save)
+                                .modal(true)
+                                .title("Saved")
+                                .text(".desktop file updated")
+                                .secondary_text(&format!("Updated {}", sp.display()))
+                                .build();
+                            dialog.add_button("Open Folder", ResponseType::Accept);
+                            dialog.add_button("Close", ResponseType::Close);
+                            dialog.connect_response(move |d, resp| {
+                                if resp == ResponseType::Accept {
+                                    #[cfg(target_os = "linux")]
+                                    {
+                                        if let Some(parent) = sp.parent() { let _ = open::that(parent); }
+                                    }
                                 }
-                            }
-                            d.close();
-                        });
-                        dialog.show();
+                                d.close();
+                            });
+                            dialog.show();
+                        }
+                        Err(err) => show_error(&win_save, &err.to_string()),
                     }
-                    Err(err) => show_error(&win_save, &err.to_string()),
+                } else {
+                    let file_name = if !de.name.trim().is_empty() { de.name.clone() } else { "desktop-entry".into() };
+                    match DesktopWriter::write(&de, &file_name, true) {
+                        Ok(path) => {
+                            let dialog = gtk4::MessageDialog::builder()
+                                .transient_for(&win_save)
+                                .modal(true)
+                                .title("Saved")
+                                .text(".desktop file created")
+                                .secondary_text(&format!("Saved to {}", path.display()))
+                                .build();
+                            dialog.add_button("Open Folder", ResponseType::Accept);
+                            dialog.add_button("Close", ResponseType::Close);
+                            dialog.connect_response(move |d, resp| {
+                                if resp == ResponseType::Accept {
+                                    #[cfg(target_os = "linux")]
+                                    {
+                                        if let Some(parent) = path.parent() { let _ = open::that(parent); }
+                                    }
+                                }
+                                d.close();
+                            });
+                            dialog.show();
+                        }
+                        Err(err) => show_error(&win_save, &err.to_string()),
+                    }
                 }
             }
             Err(err) => show_error(&win_save, &err)

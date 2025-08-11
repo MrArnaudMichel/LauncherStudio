@@ -2,7 +2,7 @@ use crate::domain::desktop_entry::DesktopEntry;
 use anyhow::{anyhow, Context, Result};
 use directories::BaseDirs;
 use std::fs;
-use std::path::{PathBuf};
+use std::path::{Path, PathBuf};
 
 pub struct DesktopWriter;
 
@@ -29,7 +29,7 @@ impl DesktopWriter {
         let content = entry.to_ini_string();
         fs::write(&path, content).with_context(|| format!("Writing {}", path.display()))?;
 
-        // Try to make it executable, some tools prefer it (not strictly required)
+        // Try to set sane permissions (not strictly required)
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -39,6 +39,23 @@ impl DesktopWriter {
         }
 
         Ok(path)
+    }
+
+    pub fn write_to_path(entry: &DesktopEntry, path: &Path) -> Result<PathBuf> {
+        entry.validate().map_err(|e| anyhow!(e))?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).with_context(|| format!("Creating directory {}", parent.display()))?;
+        }
+        let content = entry.to_ini_string();
+        fs::write(path, content).with_context(|| format!("Writing {}", path.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(path)?.permissions();
+            perms.set_mode(0o644);
+            fs::set_permissions(path, perms)?;
+        }
+        Ok(path.to_path_buf())
     }
 }
 
